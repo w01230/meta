@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useController } from '../../context/ControllerContext';
-import { formatBytes, formatSpeed, formatTime, extractVersionToken } from '../../utils/format';
-import {
-  calculateOutboundDistribution,
-  calculateProtocolDistribution,
-  matchFlagForNodeName,
-  stripLeadingFlag,
-  formatMicroTimestamp
-} from '../../utils/allocation';
-import { sortProxyGroups, matchRegionFlag, sanitizeDisplayName } from '../../utils/proxy';
+import { formatBytes, getLatencyInfo } from '../../utils/format';
+import { sortProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
+import { TrafficRateChart } from './TrafficRateChart';
+import { RuleFlowPanel } from './RuleFlowPanel';
 
 import { 
   RotateCcw,
-  ExternalLink,
-  MoreHorizontal,
   ArrowUpRight,
   X,
   Zap,
@@ -22,14 +15,48 @@ import {
   ShieldCheck,
   Radio,
   Activity,
-  Sliders,
+  Waypoints,
   Check,
-  Globe
+  Sliders,
+  RadioTower,
+  Globe,
+  Server,
+  Monitor,
+  Database,
 } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
-import { RunMode, ProxyItem } from '../../types/api';
+import { RunMode, ConnectionItem, ProxyItem } from '../../types/api';
+
+interface ConnectionRankEntry {
+  key: string;
+  download: number;
+  upload: number;
+  count: number;
+  share: number;
+}
+
+function rankConnections(
+  connections: ConnectionItem[],
+  getKey: (connection: ConnectionItem) => string,
+): ConnectionRankEntry[] {
+  const groups = new Map<string, Omit<ConnectionRankEntry, 'share'>>();
+  for (const connection of connections) {
+    const key = getKey(connection);
+    const current = groups.get(key) || { key, download: 0, upload: 0, count: 0 };
+    current.download += Number.isFinite(connection.download) ? Math.max(0, connection.download) : 0;
+    current.upload += Number.isFinite(connection.upload) ? Math.max(0, connection.upload) : 0;
+    current.count += 1;
+    groups.set(key, current);
+  }
+  const all = [...groups.values()].sort((a, b) => b.download + b.upload - a.download - a.upload);
+  const total = all.reduce((sum, item) => sum + item.download + item.upload, 0);
+  return all.slice(0, 3).map((item) => ({
+    ...item,
+    share: total > 0 ? ((item.download + item.upload) / total) * 100 : 0,
+  }));
+}
 
 interface OverviewViewProps {
   onNavigateTab: (tab: string) => void;
@@ -44,12 +71,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     status,
     demoMode,
     baseUrl,
-    version,
     config,
     updateConfigMode,
     connectController,
     refreshAll,
     currentTraffic,
+    trafficHistory,
     trafficTotal,
     currentMemory,
     proxies,
@@ -57,41 +84,52 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     rules,
     switchProxy,
     testProxyDelay,
-    closeConnection,
     closeAllConnections
   } = useController();
 
   const { showToast } = useToast();
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [testingNodes, setTestingNodes] = useState<Record<string, boolean>>({});
-  const [connToClose, setConnToClose] = useState<{ id: string; host: string } | null>(null);
   const [showCloseAllConfirm, setShowCloseAllConfirm] = useState(false);
   const [selectedGroupForSwitch, setSelectedGroupForSwitch] = useState<ProxyItem | null>(null);
-  const [optimisticClosedIds, setOptimisticClosedIds] = useState<Record<string, boolean>>({});
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
   const isConnected = status === 'connected';
 
-  // Clock ticker for micro-typography (updates every second)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const activeConnections = connections;
+  const canShowConnectionStats = isConnected || demoMode;
+  const rankingCards = useMemo(() => {
+    const outboundFor = (connection: ConnectionItem) => {
+      // Built-in demo fixtures store chains group-first; Mihomo's live payload is leaf-first.
+      const chain = connection.chains || [];
+      return chain[demoMode ? chain.length - 1 : 0] || '未知出站';
+    };
+    return [
+      { id: 'domains', title: '活跃域名', Icon: Globe, getKey: (connection: ConnectionItem) => connection.metadata.host || connection.metadata.destinationIP || '未知目标' },
+      { id: 'outbounds', title: '活跃出站', Icon: Server, getKey: outboundFor },
+      { id: 'sources', title: '活跃来源', Icon: Monitor, getKey: (connection: ConnectionItem) => connection.metadata.sourceIP || '未知来源' },
+    ].map((card) => ({ ...card, rows: rankConnections(canShowConnectionStats ? activeConnections : [], card.getKey) }));
+  }, [activeConnections, demoMode, canShowConnectionStats]);
 
-  // Filter out optimistic closed connections
-  const activeConnections = connections.filter((c) => !optimisticClosedIds[c.id]);
-
-  // Outbound & Protocol Distributions
-  const outboundSegments = calculateOutboundDistribution(activeConnections, demoMode);
-  const protocolSegments = calculateProtocolDistribution(activeConnections, demoMode);
+  const modeDisplayMap: Record<RunMode, { short: string; long: string }> = {
+    rule: { short: '规则模式', long: '规则分流 (Rule)' },
+    global: { short: '全局模式', long: '全局代理 (Global)' },
+    direct: { short: '直连模式', long: '直接连接 (Direct)' },
+  };
+  const modeMeta = modeDisplayMap[config?.mode || 'rule'];
+  const mixedPort = config?.['mixed-port'] || config?.port || '—';
+  const hasMemorySample = canShowConnectionStats && currentMemory !== null &&
+    Number.isFinite(currentMemory.inuse) && currentMemory.inuse >= 0;
+  const memoryLimit = currentMemory && Number.isFinite(currentMemory.oslimit) && currentMemory.oslimit > 0
+    ? currentMemory.oslimit
+    : null;
 
   // Extract primary proxy groups (Selector, URLTest, Fallback) excluding GLOBAL with consistent partition sorting
   const rawProxyGroups = Object.values(proxies).filter(
     (p) => p.all && p.all.length > 0 && p.name !== 'GLOBAL'
   );
-  const proxyGroups = sortProxyGroups(rawProxyGroups);
+  const proxyGroups = sortProxyGroups(rawProxyGroups)
+    .sort((a, b) => Number(b.type === 'Selector') - Number(a.type === 'Selector'))
+    .slice(0, 3);
 
   // Reconnect action (genuine controller handshake)
   const handleReconnect = async () => {
@@ -111,16 +149,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     }
   };
 
-  // Mode cycle toggle from 4-grid card
   const handleCycleMode = async () => {
     const modes: RunMode[] = ['rule', 'global', 'direct'];
     const current = config?.mode || 'rule';
-    const nextIdx = (modes.indexOf(current) + 1) % modes.length;
-    const nextMode = modes[nextIdx];
+    const nextMode = modes[(modes.indexOf(current) + 1) % modes.length];
     try {
       await updateConfigMode(nextMode);
-      const names: Record<RunMode, string> = { rule: '规则分流', global: '全局代理', direct: '直接连接' };
-      showToast(`已切换至: ${names[nextMode]}`, 'success');
+      showToast(`已切换至: ${modeDisplayMap[nextMode].long.split(' (')[0]}`, 'success');
     } catch (err: unknown) {
       showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
     }
@@ -152,23 +187,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     }
   };
 
-  // Optimistic close single connection
-  const handleCloseSingleConnection = async (id: string, host: string) => {
-    setOptimisticClosedIds((prev) => ({ ...prev, [id]: true }));
-    try {
-      await closeConnection(id);
-      showToast(`已断开连接: ${host}`, 'info');
-    } catch {
-      // Revert optimistic removal
-      setOptimisticClosedIds((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      showToast(`断开连接失败: ${host}`, 'error');
-    }
-  };
-
   // Close all connections
   const handleConfirmCloseAll = async () => {
     try {
@@ -180,36 +198,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       setShowCloseAllConfirm(false);
     }
   };
-
-  // Parse endpoint host:port from baseUrl
-  const endpointDisplay = (() => {
-    try {
-      const u = new URL(baseUrl);
-      return `${u.hostname}:${u.port || (u.protocol === 'https:' ? '443' : '80')}`;
-    } catch {
-      return baseUrl.replace(/^https?:\/\//, '');
-    }
-  })();
-
-  // Mode display names
-  const modeDisplayMap: Record<RunMode, { short: string; long: string }> = {
-    rule: { short: '规则模式', long: '规则分流 (Rule)' },
-    global: { short: '全局模式', long: '全局代理 (Global)' },
-    direct: { short: '直连模式', long: '直接连接 (Direct)' }
-  };
-  const activeMode = config?.mode || 'rule';
-  const modeMeta = modeDisplayMap[activeMode];
-
-  // Core version display (Strict API truth, no fabricated OS or Go runtime)
-  const coreVersionDisplay = demoMode
-    ? 'Demo'
-    : status === 'connected' && version?.version
-    ? extractVersionToken(version.version) || 'META'
-    : status === 'connecting'
-    ? '连接中...'
-    : isConnected
-    ? 'META'
-    : '—';
 
   return (
     <div className="overview-container">
@@ -261,285 +249,134 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
       )}
-
-
-      {/* =========================================================================
-          1. Core Hero Section (Big Core Identity & Aligned Small Metadata)
-          ========================================================================= */}
-      <section className="core-hero-section">
-        {/* Left: Reconnect Button + Main Title + Version/Mode Capsule */}
-        <div className="hero-title-group">
-          <button
-            type="button"
-            className="btn-circle-action size-lg hero-reconnect-btn"
-            onClick={handleReconnect}
-            disabled={isReconnecting}
-            data-tooltip="重新连接控制器并同步数据"
-            aria-label="重新连接控制器"
-          >
-            <RotateCcw size={16} className={isReconnecting ? 'spin-animation' : ''} />
-          </button>
-
-          <div className="hero-heading-block">
-            <div className="hero-title-row">
-              <h1 className="hero-core-title">META Core</h1>
-              <span className="hero-version-capsule">
-                {coreVersionDisplay} · {modeMeta.short}
-              </span>
-            </div>
+      <section className="panel-right-system-style overview-services-panel" aria-labelledby="overview-services-title">
+        <div className="panel-header-bar">
+          <div className="panel-header-left">
+            <Sliders size={19} className="panel-header-icon" aria-hidden="true" />
+            <h2 id="overview-services-title" className="panel-heading-title">服务状态</h2>
           </div>
         </div>
 
-        {/* Center: 5 Columns of Aligned Real Metadata (2x2 + secondary strip on mobile) */}
-        <div className="hero-inline-metadata" aria-label="核心运行时参数概览">
-          <div className="hero-metadata-grid-2x2">
-            <div className="hero-metadata-cell">
-              <span className="metadata-cell-label">核心版本</span>
-              <span className="metadata-cell-value tabular-nums">{coreVersionDisplay}</span>
-            </div>
-
-            <div 
-              className="hero-metadata-cell clickable-meta-cell" 
-              onClick={handleCycleMode} 
-              data-tooltip="点击切换运行模式"
-              role="button"
-              tabIndex={0}
-            >
-              <span className="metadata-cell-label">运行模式</span>
-              <span className="metadata-cell-value">{modeMeta.long}</span>
-            </div>
-
-            <div className="hero-metadata-cell">
-              <span className="metadata-cell-label">控制端点</span>
-              <span className="metadata-cell-value tabular-nums">{endpointDisplay}</span>
-            </div>
-
-            <div className="hero-metadata-cell">
-              <span className="metadata-cell-label">混合端口</span>
-              <span className="metadata-cell-value tabular-nums">
-                {config ? `${config['mixed-port'] || config.port || 7890} (Mixed)` : isConnected ? '7890' : '—'}
-              </span>
-            </div>
-          </div>
-
-          <div 
-            className="hero-metadata-secondary-strip"
-            onClick={() => onNavigateTab('rules')}
+        <div className="service-integration-grid" role="region" aria-label="核心服务状态网格">
+          <div
+            className="service-card clickable-card"
+            onClick={() => void handleCycleMode()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                void handleCycleMode();
+              }
+            }}
+            data-tooltip="点击切换运行模式"
             role="button"
             tabIndex={0}
-            data-tooltip="查看生效规则明细"
+            aria-label={`当前运行模式：${modeMeta.long}；激活以切换`}
           >
-            <span className="metadata-cell-label">生效规则</span>
-            <span className="metadata-cell-value tabular-nums">
-              {isConnected || demoMode ? `${rules.length.toLocaleString()} 条` : '—'}
-            </span>
+            <div className="service-card-badge">{modeMeta.short}</div>
+            <div className="service-card-icon-wrap icon-mode"><Sliders size={20} /></div>
+            <div className="service-card-title">运行分流模式</div>
+            <div className="service-card-sub">Rule / Global / Direct</div>
           </div>
-        </div>
 
+          <div className="service-card" data-tooltip="内核混合代理监听端口">
+            <div className="service-card-badge tabular-nums">{mixedPort}</div>
+            <div className="service-card-icon-wrap icon-port"><Radio size={20} /></div>
+            <div className="service-card-title">混合监听端口</div>
+            <div className="service-card-sub">Socks5 &amp; HTTP 监听</div>
+          </div>
 
-        {/* Right: Quick Action Buttons */}
-        <div className="hero-quick-actions">
-          <button
-            type="button"
-            className="btn-circle-action size-lg"
-            onClick={onOpenSettings}
-            data-tooltip="控制中心菜单与设置"
-            aria-label="控制中心设置"
+          <div
+            className="service-card clickable-card"
+            onClick={() => onNavigateTab('rules')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onNavigateTab('rules');
+              }
+            }}
+            data-tooltip="查看所有生效分流规则"
+            role="button"
+            tabIndex={0}
+            aria-label="查看生效分流规则"
           >
-            <MoreHorizontal size={17} />
-          </button>
+            <div className="service-card-badge tabular-nums">{canShowConnectionStats ? rules.length.toLocaleString() : '—'}</div>
+            <div className="service-card-icon-wrap icon-rules"><ShieldCheck size={20} /></div>
+            <div className="service-card-title">生效分流规则</div>
+            <div className="service-card-sub">GEOIP · 域名匹配</div>
+          </div>
 
-          <a
-            href="https://metacubex.github.io/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-circle-action size-lg"
-            data-tooltip="在新标签页中打开官方文档"
-            aria-label="查看官方文档"
+          <div
+            className="service-card clickable-card"
+            onClick={() => onNavigateTab('connections')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onNavigateTab('connections');
+              }
+            }}
+            data-tooltip="查看全部活动连接"
+            role="button"
+            tabIndex={0}
+            aria-label="查看全部活动连接"
           >
-            <ArrowUpRight size={17} />
-          </a>
-        </div>
-      </section>
-
-      {/* =========================================================================
-          2. Allocation Ribbons Section (Dual Segmented Colored & Patterned Bars)
-          ========================================================================= */}
-      <section className="allocation-ribbons-section">
-        {/* Left Card: Outbound Allocation & Downstream Throughput */}
-        <div className="ribbon-card">
-          {/* Header Segment Labels */}
-          <div className="ribbon-header-row">
-            <div className="ribbon-header-labels">
-              {demoMode && <span className="demo-tag-pill">【仿真】</span>}
-              {outboundSegments.length === 0 ? (
-                <span className="ribbon-empty-text">当前无活动出站连接</span>
-              ) : (
-                outboundSegments.map((seg) => (
-                  <span key={seg.name} className="ribbon-label-item">
-                    <span className={`ribbon-color-dot ${seg.colorClass}`} />
-                    <span className="ribbon-label-name">{seg.name}</span>
-                    <span className="ribbon-label-pct tabular-nums">{seg.percentage}%</span>
-                  </span>
-                ))
-              )}
-            </div>
-
-            <button
-              type="button"
-              className="btn-circle-action size-sm ribbon-corner-btn"
-              onClick={() => onNavigateTab('connections')}
-              data-tooltip="查看连接追踪明细"
-              aria-label="查看连接明细"
-            >
-              <ArrowUpRight size={14} />
-            </button>
+            <div className="service-card-badge tabular-nums">{canShowConnectionStats ? activeConnections.length : '—'}</div>
+            <div className="service-card-icon-wrap icon-conn"><Activity size={20} /></div>
+            <div className="service-card-title">当前活跃连接</div>
+            <div className="service-card-sub">实时 WS 会话追踪</div>
           </div>
 
-          {/* Segmented Ribbon Bar (Multi-color or Honest Empty Track) */}
-          <div className="segmented-ribbon-bar" role="progressbar" aria-label="出站链路分流配比条带">
-            {outboundSegments.length === 0 ? (
-              <div className="ribbon-segment pattern-empty-track full-track">
-                <span>当前无活动连接 / 空载</span>
-              </div>
-            ) : (
-              outboundSegments.map((seg) => (
-                <div
-                  key={seg.name}
-                  className={`ribbon-segment ${seg.colorClass}`}
-                  style={{ width: `${seg.percentage}%` }}
-                  data-tooltip={`出站链路 [${seg.name}]: ${seg.count} 条连接 (占比 ${seg.percentage}%)`}
-                >
-                  {seg.percentage >= 14 && (
-                    <span className="segment-inner-pct tabular-nums">{seg.percentage}%</span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Metric Footer: Big Value + Subtitle + Micro Date Timestamp */}
-          <div className="ribbon-metric-footer">
-            <div className="metric-footer-left">
-              <div className="ribbon-big-value tabular-nums">
-                ↓ {isConnected || demoMode ? (currentTraffic ? formatSpeed(currentTraffic.down) : '0 B/s') : '— B/s'}
-              </div>
-              <div className="ribbon-sub-label">
-                实时下行速率 · 累计会话下载 {formatBytes(trafficTotal.downTotal)}
-              </div>
+          <div
+            className="service-card service-card-memory"
+            data-tooltip={hasMemorySample ? '内核 /memory 报告的当前 inuse 值' : '连接控制器并收到有效内存采样后显示'}
+            aria-label={hasMemorySample
+              ? `内核 RAM 占用 ${formatBytes(currentMemory!.inuse)}${memoryLimit ? `，OS 限制 ${formatBytes(memoryLimit)}` : ''}`
+              : '内核 RAM 占用暂无有效采样'}
+          >
+            <div className="service-card-badge tabular-nums">
+              {hasMemorySample ? formatBytes(currentMemory!.inuse) : '—'}
             </div>
-
-            <div className="metric-footer-right">
-              <div className="ribbon-micro-time tabular-nums">
-                {formatMicroTimestamp(currentTime)}
-              </div>
-              <div className="ribbon-micro-sub">采样周期 1s</div>
+            <div className="service-card-icon-wrap icon-memory"><Database size={20} /></div>
+            <div className="service-card-title">内核 RAM 占用</div>
+            <div className="service-card-sub">
+              {hasMemorySample
+                ? memoryLimit
+                  ? `OS 限制 ${formatBytes(memoryLimit)}`
+                  : '实时 /memory 采样'
+                : '等待有效采样'}
             </div>
-          </div>
-        </div>
-
-        {/* Right Card: Network Protocol & Core Memory */}
-        <div className="ribbon-card">
-          {/* Header Segment Labels */}
-          <div className="ribbon-header-row">
-            <div className="ribbon-header-labels">
-              {demoMode && <span className="demo-tag-pill">【仿真】</span>}
-              {protocolSegments.length === 0 ? (
-                <span className="ribbon-empty-text">当前无活动传输协议</span>
-              ) : (
-                protocolSegments.map((seg) => (
-                  <span key={seg.name} className="ribbon-label-item">
-                    <span className={`ribbon-color-dot ${seg.patternClass}`} />
-                    <span className="ribbon-label-name">{seg.name}</span>
-                    <span className="ribbon-label-pct tabular-nums">{seg.percentage}%</span>
-                  </span>
-                ))
-              )}
-            </div>
-
-            <button
-              type="button"
-              className="btn-circle-action size-sm ribbon-corner-btn"
-              onClick={() => setShowCloseAllConfirm(true)}
-              disabled={activeConnections.length === 0}
-              data-tooltip="一键断开全部活动连接"
-              aria-label="一键断开全部连接"
-            >
-              <X size={13} />
-            </button>
-          </div>
-
-          {/* Segmented Ribbon Bar (Patterned: Dark dots & Gray stripes, or Empty Track) */}
-          <div className="segmented-ribbon-bar" role="progressbar" aria-label="传输协议配比条带">
-            {protocolSegments.length === 0 ? (
-              <div className="ribbon-segment pattern-empty-track full-track">
-                <span>当前无活动传输协议 / 空载</span>
-              </div>
-            ) : (
-              protocolSegments.map((seg) => (
-                <div
-                  key={seg.name}
-                  className={`ribbon-segment ${seg.patternClass}`}
-                  style={{ width: `${seg.percentage}%` }}
-                  data-tooltip={`传输协议 [${seg.name}]: ${seg.count} 条连接 (占比 ${seg.percentage}%)`}
-                >
-                  {seg.percentage >= 14 && (
-                    <span className="segment-inner-pct tabular-nums">{seg.percentage}%</span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Metric Footer: Big Memory Value + Subtitle + Micro Source */}
-          <div className="ribbon-metric-footer">
-            <div className="metric-footer-left">
-              <div className="ribbon-big-value tabular-nums">
-                {isConnected || demoMode ? (currentMemory && currentMemory.inuse > 0 ? formatBytes(currentMemory.inuse) : '0 B') : '— MB'}
-              </div>
-              <div className="ribbon-sub-label">
-                系统内存占用 {currentMemory?.oslimit && currentMemory.oslimit > 0 ? `· 系统限制 ${formatBytes(currentMemory.oslimit)}` : ''}
-              </div>
-            </div>
-
-            <div className="metric-footer-right">
-              <div className="ribbon-micro-time tabular-nums">
-                {formatMicroTimestamp(currentTime)}
-              </div>
-              <div className="ribbon-micro-sub">来源 WS /memory</div>
-            </div>
-
           </div>
         </div>
       </section>
 
-      {/* =========================================================================
-          3. Slim Divider Line
-          ========================================================================= */}
+      {/* Real-time Traffic Rate History Chart */}
+      <TrafficRateChart
+        samples={trafficHistory}
+        currentTraffic={currentTraffic}
+        trafficTotal={trafficTotal}
+        isConnected={isConnected}
+        demoMode={demoMode}
+      />
+
+      <RuleFlowPanel
+        connections={activeConnections}
+        isConnected={isConnected}
+        demoMode={demoMode}
+      />
+
+      {/* Slim Divider Line */}
       <div className="slim-divider-line" />
 
-      {/* =========================================================================
-          4. Lower Asymmetric Split (42% Deal History Proxies : 58% Services & Conn)
-          ========================================================================= */}
+      {/* Strategy groups remain below the traffic and observed-route panels. */}
       <section className="dashboard-asymmetric-grid">
-        {/* Left Column (42%): Deal History Style Proxy Rows */}
+        {/*常用策略组：前三个可用策略组以三列并排呈现*/}
         <div className="panel-left-deal-style">
           <div className="panel-header-bar">
             <div className="panel-header-left">
+              <Waypoints size={19} className="panel-header-icon" aria-hidden="true" />
               <h2 className="panel-heading-title">策略组分流</h2>
-              <span className="panel-dots-subtle">···</span>
             </div>
 
             <div className="panel-header-actions">
-              <button
-                type="button"
-                className="btn-circle-action size-md"
-                onClick={() => onNavigateTab('proxies')}
-                data-tooltip="代理策略组视图"
-                aria-label="筛选代理策略"
-              >
-                <MoreHorizontal size={15} />
-              </button>
               <button
                 type="button"
                 className="btn-circle-action size-md"
@@ -559,44 +396,21 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 {isConnected || demoMode ? '暂无可用策略组' : '未连接到核心控制器，暂无代理数据'}
               </div>
             ) : (
-              proxyGroups.slice(0, 4).map((group) => {
+              proxyGroups.map((group) => {
                 const isSelector = group.type === 'Selector';
                 const currentNode = group.now || '';
                 const nodeItem = proxies[currentNode];
                 const latestDelay = nodeItem?.history?.[0]?.delay;
-                const flagEmoji = matchFlagForNodeName(currentNode);
+                const latency = getLatencyInfo(latestDelay);
                 const isTesting = testingNodes[currentNode];
-
-                // Deal pill text & tone
-                const delayText = latestDelay !== undefined && latestDelay > 0 ? `⚡ ${latestDelay} ms` : '⚡ — ms';
-                const pillToneClass = latestDelay !== undefined && latestDelay > 0
-                  ? latestDelay < 150
-                    ? 'pill-tone-cream'
-                    : latestDelay < 350
-                    ? 'pill-tone-blue'
-                    : 'pill-tone-amber'
-                  : 'pill-tone-neutral';
 
                 // Real node protocol from nodeItem.type (no fake multiplier!)
                 const nodeProto = nodeItem?.type || (currentNode === 'DIRECT' ? 'Direct' : 'Proxy');
 
                 return (
                   <div key={group.name} className="deal-row-card">
-                    {/* Left Half: Large Colored Pill + Group Title + Metadata */}
+                    {/* Strategy group identity and per-group details navigation */}
                     <div className="deal-card-left">
-                      <div className={`deal-pill-badge ${pillToneClass}`}>
-                        <span className="deal-pill-text tabular-nums">{delayText}</span>
-                        <button
-                          type="button"
-                          className="deal-pill-arrow-btn"
-                          onClick={() => onNavigateTab('proxies')}
-                          data-tooltip={`查看 [${group.name}] 所有节点`}
-                          aria-label={`查看 ${group.name} 详情`}
-                        >
-                          <ArrowUpRight size={11} />
-                        </button>
-                      </div>
-
                       <div className="deal-group-title" data-tooltip={group.name}>
                         <CircularFlag name={group.name} size={18} className="group-flag-inline" />
                         <span className="deal-group-name">{sanitizeDisplayName(group.name)}</span>
@@ -624,6 +438,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
 
                       <div className="deal-actions-group">
+                        <span
+                          className={`node-latency-tag ${latency.className}`}
+                          data-tooltip={`当前选定「${currentNode || '未指定'}」延迟: ${latency.text}`}
+                          aria-label={`当前选定「${currentNode || '未指定'}」延迟: ${latency.text}`}
+                        >
+                          {latency.text}
+                        </span>
                         {/* Test delay circular button */}
                         <button
                           type="button"
@@ -656,193 +477,73 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column (58%): 4-Grid System Tiles & Dense Connections Table */}
-        <div className="panel-right-system-style">
-          <div className="panel-header-bar">
-            <div className="panel-header-left">
-              <h2 className="panel-heading-title">活动连接与服务</h2>
-              <span className="panel-dots-subtle">···</span>
-            </div>
+      </section>
 
-            <div className="panel-header-actions">
-              <button
-                type="button"
-                className="btn-circle-action size-md"
-                onClick={() => setShowCloseAllConfirm(true)}
-                disabled={activeConnections.length === 0}
-                data-tooltip="一键断开全部活动连接"
-                aria-label="一键断开全部连接"
-              >
-                <X size={15} />
-              </button>
-              <button
-                type="button"
-                className="btn-circle-action size-md"
-                onClick={() => onNavigateTab('connections')}
-                data-tooltip="连接配置与排序"
-                aria-label="连接配置"
-              >
-                <MoreHorizontal size={15} />
-              </button>
-              <button
-                type="button"
-                className="btn-circle-action size-md"
-                onClick={() => onNavigateTab('connections')}
-                data-tooltip="进入完整连接追踪页面"
-                aria-label="完整连接页面"
-              >
-                <ArrowUpRight size={15} />
-              </button>
-            </div>
+      <section className="overview-full-card overview-rankings-panel" aria-labelledby="overview-rankings-title">
+        <div className="panel-header-bar overview-activity-header">
+          <div className="panel-header-left">
+            <RadioTower size={19} className="panel-header-icon" aria-hidden="true" />
+            <h2 id="overview-rankings-title" className="panel-heading-title">活动连接</h2>
           </div>
-
-          {/* 4-Grid Core System Status Cards (Real API-Backed, NO Fake DNS/TUN States) */}
-          <div className="service-integration-grid" role="region" aria-label="核心服务状态网格">
-            {/* Tile 1: Run Mode */}
-            <div 
-              className="service-card clickable-card" 
-              onClick={handleCycleMode}
-              data-tooltip="点击切换运行模式"
-              role="button"
-              tabIndex={0}
+          <div className="panel-header-actions">
+            <button
+              type="button"
+              className="btn-circle-action size-md"
+              onClick={() => setShowCloseAllConfirm(true)}
+              disabled={!canShowConnectionStats || activeConnections.length === 0}
+              data-tooltip="一键断开全部活动连接"
+              aria-label="一键断开全部连接"
             >
-              <div className="service-card-badge">{modeMeta.short}</div>
-              <div className="service-card-icon-wrap icon-mode">
-                <Sliders size={20} />
-              </div>
-              <div className="service-card-title">运行分流模式</div>
-              <div className="service-card-sub">Rule / Global / Direct</div>
-            </div>
-
-            {/* Tile 2: Listening Port */}
-            <div className="service-card" data-tooltip="内核混合代理监听端口">
-              <div className="service-card-badge tabular-nums">
-                {config ? config['mixed-port'] || config.port || 7890 : isConnected ? '7890' : '—'}
-              </div>
-              <div className="service-card-icon-wrap icon-port">
-                <Radio size={20} />
-              </div>
-              <div className="service-card-title">混合监听端口</div>
-              <div className="service-card-sub">Socks5 & HTTP 监听</div>
-            </div>
-
-            {/* Tile 3: Active Rules */}
-            <div 
-              className="service-card clickable-card" 
-              onClick={() => onNavigateTab('rules')}
-              data-tooltip="查看所有生效分流规则"
-              role="button"
-              tabIndex={0}
-            >
-              <div className="service-card-badge tabular-nums">
-                {isConnected || demoMode ? rules.length.toLocaleString() : '—'}
-              </div>
-              <div className="service-card-icon-wrap icon-rules">
-                <ShieldCheck size={20} />
-              </div>
-              <div className="service-card-title">生效分流规则</div>
-              <div className="service-card-sub">GEOIP · 域名匹配</div>
-            </div>
-
-            {/* Tile 4: Active Connections */}
-            <div 
-              className="service-card clickable-card" 
-              onClick={() => onNavigateTab('connections')}
-              data-tooltip="查看全部活动连接"
-              role="button"
-              tabIndex={0}
-            >
-              <div className="service-card-badge tabular-nums">
-                {activeConnections.length}
-              </div>
-              <div className="service-card-icon-wrap icon-conn">
-                <Activity size={20} />
-              </div>
-              <div className="service-card-title">当前活跃连接</div>
-              <div className="service-card-sub">实时 WS 会话追踪</div>
-            </div>
+              <X size={15} />
+            </button>
+            <button type="button" className="btn-circle-action size-md" onClick={() => onNavigateTab('connections')} data-tooltip="进入完整连接追踪页面" aria-label="完整连接页面">
+              <ArrowUpRight size={15} />
+            </button>
           </div>
+        </div>
 
-          {/* Dense Connections Table (Blue Link Style) */}
-          <div className="connections-dense-table-wrapper">
-            <table className="connections-dense-table">
-              <thead>
-                <tr className="table-header-row">
-                  <th style={{ width: '4%' }} aria-label="状态指示点" />
-                  <th style={{ width: '36%' }}>目标主机 (Host)</th>
-                  <th style={{ width: '32%' }}>关联进程与链路</th>
-                  <th style={{ width: '16%' }}>建立时间</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeConnections.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="table-empty-td">
-                      {isConnected || demoMode ? '当前无活动网络连接' : '未连接到控制器，暂无连接数据'}
-                    </td>
-                  </tr>
-                ) : (
-                  activeConnections.slice(0, 5).map((conn) => {
-                    const host = conn.metadata.host || conn.metadata.destinationIP || '未知主机';
-                    const process = conn.metadata.process || conn.metadata.network.toUpperCase();
-                    const chainText = (conn.chains || []).map(stripLeadingFlag).join(' → ') || '直连';
-
+        <div className="overview-rankings" aria-label="当前活动连接快照流量排行">
+          {rankingCards.map(({ id, title, Icon, rows }) => (
+            <section className="overview-ranking-card" key={id} aria-labelledby={`overview-ranking-${id}`}>
+              <div className="overview-ranking-title">
+                <Icon size={17} aria-hidden="true" />
+                <h3 id={`overview-ranking-${id}`}>{title}</h3>
+              </div>
+              {rows.length > 0 ? (
+                <ol className="overview-rank-list">
+                  {rows.map((row, index) => {
+                    const share = Math.max(0, Math.min(100, row.share));
                     return (
-                      <tr key={conn.id} className="conn-table-row">
-                        {/* Dot indicator */}
-                        <td className="conn-dot-cell">
-                          <span className="conn-active-dot" />
-                        </td>
-
-                        {/* Blue Link Host */}
-                        <td className="conn-host-cell">
-                          <span
-                            className="conn-host-link"
-                            data-tooltip={`点击跳转查看详情: ${host}`}
-                            onClick={() => onNavigateTab('connections')}
-                            role="button"
-                            tabIndex={0}
-                          >
-                            {host}
-                          </span>
-                        </td>
-
-                        {/* Process & Chain */}
-                        <td className="conn-process-cell">
-                          <span className="conn-process-text" data-tooltip={`${process} · ${chainText}`}>
-                            {process} · {chainText}
-                          </span>
-                        </td>
-
-                        {/* Time */}
-                        <td className="conn-time-cell tabular-nums">
-                          {formatTime(conn.start)}
-                        </td>
-
-                        {/* Action: Status pill + Optimistic Close Button */}
-                        <td className="conn-action-cell">
-                          <span className="conn-status-pill">活跃</span>
-                          <button
-                            type="button"
-                            className="btn-circle-action size-xs danger conn-close-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseSingleConnection(conn.id, host);
-                            }}
-                            data-tooltip={`断开连接: ${host}`}
-                            aria-label={`断开连接 ${host}`}
-                          >
-                            <X size={12} />
-                          </button>
-                        </td>
-                      </tr>
+                      <li className="overview-rank-row" key={row.key}>
+                        <div className="overview-rank-main">
+                          <span className="overview-rank-index">{index + 1}</span>
+                          <strong data-tooltip={row.key}>{row.key}</strong>
+                          <b>{formatBytes(row.download + row.upload)}</b>
+                        </div>
+                        <div className="overview-rank-track" role="progressbar" aria-label={`${row.key} 流量占比`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(share.toFixed(1))}>
+                          <span style={{ width: `${share}%` }} />
+                        </div>
+                        <div className="overview-rank-meta">
+                          <span className="download">↓ {formatBytes(row.download)}</span>
+                          <span className="upload">↑ {formatBytes(row.upload)}</span>
+                          <span>{row.count} 条</span>
+                          <span>{share.toFixed(1)}%</span>
+                        </div>
+                      </li>
                     );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                  })}
+                </ol>
+              ) : (
+                <div className="overview-ranking-empty" role="status">
+                  {canShowConnectionStats
+                    ? '暂无活动连接数据'
+                    : status === 'connecting'
+                      ? '正在同步活动连接数据'
+                      : '控制器未连接，暂无活动统计'}
+                </div>
+              )}
+            </section>
+          ))}
         </div>
       </section>
 
@@ -904,22 +605,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         isDestructive={true}
       />
 
-      {/* Confirm Close Single Connection Dialog */}
-      <ConfirmDialog
-        isOpen={!!connToClose}
-        onClose={() => setConnToClose(null)}
-        onConfirm={() => {
-          if (connToClose) {
-            handleCloseSingleConnection(connToClose.id, connToClose.host);
-            setConnToClose(null);
-          }
-        }}
-        title="确认断开该连接？"
-        message={`即将断开与 ${connToClose?.host} 的活动会话。`}
-        confirmText="确认断开"
-        cancelText="取消"
-        isDestructive={true}
-      />
     </div>
   );
 };

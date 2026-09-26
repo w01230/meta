@@ -194,8 +194,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="控制与运行时配置"
+      title="设置"
       maxWidth="560px"
+      className="settings-modal-dialog"
     >
       <div className="settings-modal-body">
         {/* Onboarding copy when controller is unconfigured */}
@@ -216,7 +217,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Server size={16} aria-hidden="true" />
-              <h4 id="section-controller-title" className="settings-section-title">外部控制器连接</h4>
+              <h4 id="section-controller-title" className="settings-section-title">外部控制器</h4>
             </div>
           </div>
 
@@ -351,7 +352,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Sliders size={16} aria-hidden="true" />
-              <h4 id="section-runtime-title" className="settings-section-title">运行时参数</h4>
+              <h4 id="section-runtime-title" className="settings-section-title">运行参数</h4>
             </div>
             {runtimeVersionToken && (
               <span 
@@ -368,7 +369,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             {/* Log Level */}
             <div className="runtime-setting-row runtime-setting-row-segmented">
               <div className="setting-desc">
-                <span className="setting-name">核心日志等级 (log-level)</span>
+                <span className="setting-name">核心日志等级</span>
               </div>
               <div className="mode-segmented-capsule capsule-log-levels" role="group" aria-label="核心日志等级">
                 {(['info', 'warning', 'error', 'debug', 'silent'] as LogLevel[]).map((lvl) => (
@@ -420,7 +421,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Database size={16} aria-hidden="true" />
-              <h4 id="section-cache-title" className="settings-section-title">缓存与维护</h4>
+              <h4 id="section-cache-title" className="settings-section-title">缓存维护</h4>
             </div>
           </div>
 

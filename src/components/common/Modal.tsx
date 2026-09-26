@@ -9,6 +9,7 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   ariaLabel?: string;
+  className?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -18,7 +19,8 @@ export const Modal: React.FC<ModalProps> = ({
   subtitle,
   children,
   maxWidth = '560px',
-  ariaLabel
+  ariaLabel,
+  className
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLElement | null>(null);
@@ -120,7 +122,7 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
       <div
-        className="modal-container"
+        className={['modal-container', className].filter(Boolean).join(' ')}
         style={{ maxWidth }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

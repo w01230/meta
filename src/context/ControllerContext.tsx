@@ -98,7 +98,8 @@ const ControllerContext = createContext<ControllerContextType | null>(null);
 
 const STORAGE_KEY_BASE_URL = 'meta_dashboard_base_url';
 const SESSION_KEY_SECRET = 'meta_dashboard_secret';
-const MAX_CHART_POINTS = 30;
+const MAX_TRAFFIC_CHART_POINTS = 900;
+const MAX_MEMORY_CHART_POINTS = 30;
 const MAX_LOG_COUNT = 300;
 
 export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -308,7 +309,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (gen !== connectGenRef.current || demoModeRef.current) return;
           const tick: TrafficTick = { up: data.up || 0, down: data.down || 0, time: Date.now() };
           setCurrentTraffic(tick);
-          setTrafficHistory((prev) => [...prev, tick].slice(-MAX_CHART_POINTS));
+          setTrafficHistory((prev) => [...prev, tick].slice(-MAX_TRAFFIC_CHART_POINTS));
         },
         (connected) => {
           if (gen !== connectGenRef.current || demoModeRef.current) return;
@@ -328,7 +329,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (gen !== connectGenRef.current || demoModeRef.current) return;
           const tick: MemoryTick = { inuse: data.inuse || 0, oslimit: data.oslimit || 0, time: Date.now() };
           setCurrentMemory(tick);
-          setMemoryHistory((prev) => [...prev, tick].slice(-MAX_CHART_POINTS));
+          setMemoryHistory((prev) => [...prev, tick].slice(-MAX_MEMORY_CHART_POINTS));
         },
         (connected) => {
           if (gen !== connectGenRef.current || demoModeRef.current) return;
@@ -472,7 +473,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const tick: TrafficTick = { up, down, time: Date.now() };
       setCurrentTraffic(tick);
-      setTrafficHistory((prev) => [...prev.slice(-(MAX_CHART_POINTS - 1)), tick]);
+      setTrafficHistory((prev) => [...prev.slice(-(MAX_TRAFFIC_CHART_POINTS - 1)), tick]);
       setTrafficTotal((prev) => ({
         upTotal: prev.upTotal + up,
         downTotal: prev.downTotal + down
@@ -482,7 +483,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const memInuse = 68000000 + Math.round(Math.sin(step * 0.2) * 4000000);
       const memTick: MemoryTick = { inuse: memInuse, oslimit: 17179869184, time: Date.now() };
       setCurrentMemory(memTick);
-      setMemoryHistory((prev) => [...prev.slice(-(MAX_CHART_POINTS - 1)), memTick]);
+      setMemoryHistory((prev) => [...prev.slice(-(MAX_MEMORY_CHART_POINTS - 1)), memTick]);
 
       // Slowly increment connection bytes in demo
       setConnections((prev) =>

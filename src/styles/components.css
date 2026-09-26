@@ -1954,6 +1954,16 @@
   gap: 12px;
 }
 
+.config-view-container .config-action-row {
+  justify-content: flex-end;
+  padding-right: 17px;
+  box-sizing: border-box;
+}
+
+.config-view-container .cache-maintenance-row {
+  padding-right: 16px;
+}
+
 .mixed-content-alert {
   background: var(--status-amber-bg);
   border: 1px solid rgba(168, 100, 18, 0.25);
@@ -2637,10 +2647,16 @@ label.setting-name {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  /* Match the cache-row action inset: container border + 20px row padding. */
-  padding-right: 21px;
+  /* Match the hide-GLOBAL switch: 16px row inset + 1px row border. */
+  padding-right: 17px;
   box-sizing: border-box;
   margin-top: 6px;
+}
+
+/* The modal header has no inner settings row, so include the body inset (24px)
+   plus the 17px hide-GLOBAL control inset. */
+.settings-modal-dialog .modal-header {
+  padding-right: 41px;
 }
 
 .save-connect-action-wrap {
@@ -2770,6 +2786,16 @@ label.setting-name {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* Reference edge: toggle ends 17px inside the modal-body content edge. */
+  padding-right: 16px;
+}
+
+.settings-modal-body .cache-maintenance-row {
+  padding-right: 16px;
+}
+
+.settings-modal-body .inline-confirm-box {
+  padding-right: 16px;
 }
 
 .settings-modal-body .runtime-setting-row-toggle .setting-desc {
@@ -3123,9 +3149,9 @@ a:focus-visible {
     flex-shrink: 0;
   }
 
-  /* Cache rows use a 14px inline inset on mobile; align controller action edge. */
+  /* Match the mobile runtime toggle's 16px inset plus row border. */
   .settings-modal-actions {
-    padding-right: 15px;
+    padding-right: 17px;
   }
 
   .modal-overlay {
@@ -3138,6 +3164,10 @@ a:focus-visible {
 
   .modal-header {
     padding: 14px 16px;
+  }
+
+  .settings-modal-dialog .modal-header {
+    padding-right: 31px;
   }
 
   .modal-body {
@@ -3213,6 +3243,10 @@ a:focus-visible {
 
   .modal-header {
     padding: 12px 10px;
+  }
+
+  .settings-modal-dialog .modal-header {
+    padding-right: 25px;
   }
 
   .modal-body {
