@@ -82,7 +82,7 @@ html, body {
   width: 100%;
   max-width: 1560px;
   margin: 0 auto;
-  padding: 20px 28px 48px 28px;
+  padding: 20px clamp(2rem, 3.2vw, 5rem) 48px;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -461,13 +461,13 @@ html, body {
 /* Responsive Overrides */
 @media (max-width: 1024px) {
   .main-viewport-content {
-    padding: 16px 20px 40px 20px;
+    padding: 16px clamp(1.6rem, 2.6vw, 2rem) 40px;
   }
 }
 
 @media (max-width: 768px) {
   .main-viewport-content {
-    padding: 12px 14px 84px 14px;
+    padding: 12px clamp(1rem, 3vw, 1.6rem) 84px;
   }
 }
 

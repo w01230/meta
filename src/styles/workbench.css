@@ -22,7 +22,7 @@
 .top-bar-inner {
   width: 100%;
   max-width: 1560px;
-  padding: 0 28px;
+  padding: 0 clamp(2rem, 3.2vw, 5rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1267,7 +1267,7 @@
   }
 
   .top-bar-inner {
-    padding: 0 12px;
+    padding: 0 clamp(1rem, 3vw, 1.6rem);
     gap: 8px;
     max-width: 100%;
     box-sizing: border-box;
@@ -1477,7 +1477,7 @@
 /* Keep full route navigation compact at tablet widths without replacing it
    with the mobile menu; placed after base and mobile rules intentionally. */
 @media (min-width: 769px) and (max-width: 1024px) {
-  .top-bar-inner { gap: 8px; padding-inline: clamp(12px, 1.6vw, 18px); }
+  .top-bar-inner { gap: 8px; padding-inline: clamp(1.6rem, 2.6vw, 2rem); }
   .nav-brand { min-width: 0; gap: 6px; }
   .brand-version-badge { max-width: clamp(5.5rem, 12vw, 7.5rem); }
   .brand-version-text { max-width: 100%; }
