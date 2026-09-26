@@ -52,10 +52,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     status,
     statusError,
     version,
-    config,
     logLevel,
     setLogLevel,
-    updateConfigField,
     connectController,
     apiClient
   } = useController();

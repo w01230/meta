@@ -256,7 +256,7 @@ export const ConnectionsView: React.FC = () => {
                         </div>
                       </td>
                       <td>
-                        <span className="conn-chain-badge">
+                        <span className="conn-chain-badge" title={chainText}>
                           {chainText}
                         </span>
                       </td>

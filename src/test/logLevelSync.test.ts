@@ -223,7 +223,7 @@ describe('Log-Level Synchronization Lane', () => {
       const fetchMock = vi.fn();
       globalThis.fetch = fetchMock;
 
-      const attemptChange = async (status: string, demoMode: boolean, newLevel: LogLevel) => {
+      const attemptChange = async (status: string, demoMode: boolean, _newLevel: LogLevel) => {
         if (!demoMode && status !== 'connected') {
           throw new Error('控制器未连接，无法修改日志级别');
         }
@@ -314,7 +314,7 @@ describe('Log-Level Synchronization Lane', () => {
     });
 
     it('demo mode permits changing log-level because demo status is connected', () => {
-      const isButtonDisabled = (status: string, demoMode: boolean, isChanging: boolean) => {
+      const isButtonDisabled = (status: string, _demoMode: boolean, isChanging: boolean) => {
         // In demo mode, status is 'connected'
         return status !== 'connected' || isChanging;
       };

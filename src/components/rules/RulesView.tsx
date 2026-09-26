@@ -85,7 +85,12 @@ export const RulesView: React.FC = () => {
             <p>{isConnected ? '请检查搜索关键字或筛选条件' : '连接外部控制器以获取路由分流规则'}</p>
           </div>
         ) : (
-          <div className="rules-table-wrapper">
+          <div
+            className="rules-table-wrapper"
+            role="region"
+            aria-label="规则列表，可横向滚动查看全部列"
+            tabIndex={0}
+          >
             <table className="rules-table">
               <thead>
                 <tr>

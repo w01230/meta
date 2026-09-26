@@ -7,7 +7,6 @@ import { TrafficRateChart } from './TrafficRateChart';
 import { RuleFlowPanel } from './RuleFlowPanel';
 
 import { 
-  RotateCcw,
   ArrowUpRight,
   X,
   Zap,
@@ -124,12 +123,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     : null;
 
   // Extract primary proxy groups (Selector, URLTest, Fallback) excluding GLOBAL with consistent partition sorting
-  const rawProxyGroups = Object.values(proxies).filter(
-    (p) => p.all && p.all.length > 0 && p.name !== 'GLOBAL'
-  );
-  const proxyGroups = sortProxyGroups(rawProxyGroups)
-    .sort((a, b) => Number(b.type === 'Selector') - Number(a.type === 'Selector'))
-    .slice(0, 3);
+  const proxyGroups = useMemo(() => {
+    const rawProxyGroups = Object.values(proxies).filter(
+      (p) => p.all && p.all.length > 0 && p.name !== 'GLOBAL'
+    );
+    return sortProxyGroups(rawProxyGroups)
+      .sort((a, b) => Number(b.type === 'Selector') - Number(a.type === 'Selector'))
+      .slice(0, 3);
+  }, [proxies]);
 
   // Reconnect action (genuine controller handshake)
   const handleReconnect = async () => {

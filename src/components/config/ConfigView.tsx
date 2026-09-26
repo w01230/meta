@@ -22,9 +22,7 @@ import {
 export const ConfigView: React.FC = () => {
   const {
     baseUrl,
-    setBaseUrl,
     secret,
-    setSecret,
     hideGlobal,
     setHideGlobal,
     demoMode,

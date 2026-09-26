@@ -46,7 +46,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const {
     status,
-    statusError,
     version,
     demoMode,
     config,

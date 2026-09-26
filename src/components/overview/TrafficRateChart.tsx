@@ -13,6 +13,7 @@ interface TrafficRateChartProps {
 }
 
 const TRAFFIC_WINDOW_MINUTES = 5;
+const CHART_MARGIN = Object.freeze({ top: 14, right: 20, bottom: 26, left: 88 });
 
 export interface TrafficWindow {
   startTime: number;
@@ -142,9 +143,8 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
   // Dimensions & bounds for SVG canvas
   const viewBoxWidth = measuredChartWidth || 900;
   const viewBoxHeight = 220;
-  const margin = { top: 14, right: 20, bottom: 26, left: 88 };
-  const plotWidth = viewBoxWidth - margin.left - margin.right;
-  const plotHeight = viewBoxHeight - margin.top - margin.bottom;
+  const plotWidth = viewBoxWidth - CHART_MARGIN.left - CHART_MARGIN.right;
+  const plotHeight = viewBoxHeight - CHART_MARGIN.top - CHART_MARGIN.bottom;
 
   // Select a scale that includes the highest finite, nonnegative measured rate.
   const rateAxis = useMemo(() => {
@@ -168,13 +168,13 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
       };
     }
 
-    const baselineY = margin.top + plotHeight;
-    const pts = visibleSamples.map((s, i) => {
-      const x = getTrafficSampleX(s.time!, trafficWindow.startTime, trafficWindow.endTime, margin.left, plotWidth);
+    const baselineY = CHART_MARGIN.top + plotHeight;
+    const pts = visibleSamples.map((s) => {
+      const x = getTrafficSampleX(s.time!, trafficWindow.startTime, trafficWindow.endTime, CHART_MARGIN.left, plotWidth);
       const downRate = Number.isFinite(s.down) && s.down > 0 ? s.down : 0;
       const upRate = Number.isFinite(s.up) && s.up > 0 ? s.up : 0;
-      const downY = margin.top + plotHeight - (downRate / maxVal) * plotHeight;
-      const upY = margin.top + plotHeight - (upRate / maxVal) * plotHeight;
+      const downY = CHART_MARGIN.top + plotHeight - (downRate / maxVal) * plotHeight;
+      const upY = CHART_MARGIN.top + plotHeight - (upRate / maxVal) * plotHeight;
       return { x, downY, upY, sample: s };
     });
 
@@ -213,7 +213,7 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
       points: pts,
       isolatedPoints: segments.filter((segment) => segment.length === 1).map((segment) => segment[0]),
     };
-  }, [visibleSamples, maxVal, plotWidth, plotHeight, margin, trafficWindow.startTime, trafficWindow.endTime]);
+  }, [visibleSamples, maxVal, plotWidth, plotHeight, trafficWindow.startTime, trafficWindow.endTime]);
 
   // Pointer interactions for crosshair tooltip
   const handlePointerMove = useCallback(
@@ -221,7 +221,7 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
       if (!svgRef.current || points.length === 0) return;
       const rect = svgRef.current.getBoundingClientRect();
       const pointerX = ((e.clientX - rect.left) / rect.width) * viewBoxWidth;
-      const clampedX = Math.max(margin.left, Math.min(margin.left + plotWidth, pointerX));
+      const clampedX = Math.max(CHART_MARGIN.left, Math.min(CHART_MARGIN.left + plotWidth, pointerX));
       const idx = points.reduce((nearest, point, index) =>
         Math.abs(point.x - clampedX) < Math.abs(points[nearest].x - clampedX) ? index : nearest,
       0);
@@ -229,7 +229,7 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
         setHoverIndex(idx);
       }
     },
-    [points, margin.left, plotWidth, viewBoxWidth]
+    [points, plotWidth, viewBoxWidth]
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -248,9 +248,9 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
   const yTicks = useMemo(() => {
     return rateAxis.ticks.map((tick, index) => ({
       ...tick,
-      y: margin.top + plotHeight - (index / Math.max(1, rateAxis.ticks.length - 1)) * plotHeight,
+      y: CHART_MARGIN.top + plotHeight - (index / Math.max(1, rateAxis.ticks.length - 1)) * plotHeight,
     }));
-  }, [rateAxis, margin.top, plotHeight]);
+  }, [rateAxis, plotHeight]);
 
   // Fixed-interval clock ticks preserve the exact current-time boundary.
   const xTicks = useMemo(() => {
@@ -259,13 +259,13 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
       const ratio = (time - trafficWindow.startTime) / Math.max(1, trafficWindow.endTime - trafficWindow.startTime);
       return {
         time,
-        x: margin.left + ratio * plotWidth,
+        x: CHART_MARGIN.left + ratio * plotWidth,
         label: formatTimeLabel(time),
         alignment: i === 0 ? 'start' as const : i === tickTimes.length - 1 ? 'end' as const : 'middle' as const,
         isIntermediate: i !== 0 && i !== tickTimes.length - 1,
       };
     });
-  }, [trafficWindow.startTime, trafficWindow.endTime, margin.left, plotWidth]);
+  }, [trafficWindow.startTime, trafficWindow.endTime, plotWidth]);
 
   const activePoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : null;
 
@@ -348,15 +348,15 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
               {yTicks.map((tick, i) => (
                 <g key={i} className="chart-grid-line-group">
                   <line
-                    x1={margin.left}
+                    x1={CHART_MARGIN.left}
                     y1={tick.y}
-                    x2={margin.left + plotWidth}
+                    x2={CHART_MARGIN.left + plotWidth}
                     y2={tick.y}
                     className="chart-grid-line"
                     strokeDasharray={i === 0 ? undefined : '3 4'}
                   />
                   <text
-                    x={margin.left - 8}
+                    x={CHART_MARGIN.left - 8}
                     y={tick.y + 4}
                     textAnchor="end"
                     className="chart-axis-text"
@@ -371,16 +371,16 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
                 <line
                   key={`grid-${tick.time}`}
                   x1={tick.x}
-                  y1={margin.top}
+                  y1={CHART_MARGIN.top}
                   x2={tick.x}
-                  y2={margin.top + plotHeight}
+                  y2={CHART_MARGIN.top + plotHeight}
                   className="chart-grid-line chart-time-grid-line"
                   strokeDasharray="3 4"
                 />
               ))}
 
               {/* X-axis labels have dedicated classes for optional mobile label hiding. */}
-              {xTicks.map((tick, i) => (
+              {xTicks.map((tick) => (
                 <text
                   key={tick.time}
                   x={tick.x}
@@ -431,9 +431,9 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
                   {/* Vertical Crosshair Line */}
                   <line
                     x1={activePoint.x}
-                    y1={margin.top}
+                    y1={CHART_MARGIN.top}
                     x2={activePoint.x}
-                    y2={margin.top + plotHeight}
+                    y2={CHART_MARGIN.top + plotHeight}
                     stroke="var(--border-card)"
                     strokeWidth="1.5"
                     strokeDasharray="2 3"

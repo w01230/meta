@@ -1473,3 +1473,17 @@
 @media (min-width: 701px) and (max-width: 900px) {
   .overview-flow-canvas { height: 340px; }
 }
+
+/* Keep full route navigation compact at tablet widths without replacing it
+   with the mobile menu; placed after base and mobile rules intentionally. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .top-bar-inner { gap: 8px; padding-inline: clamp(12px, 1.6vw, 18px); }
+  .nav-brand { min-width: 0; gap: 6px; }
+  .brand-version-badge { max-width: clamp(5.5rem, 12vw, 7.5rem); }
+  .brand-version-text { max-width: 100%; }
+  .nav-tab-group { flex: 1 1 auto; min-width: 0; justify-content: center; gap: 0; }
+  .nav-tab-item,
+  .nav-tab-item.active-pill { padding-inline: clamp(4px, 0.7vw, 8px); font-size: 12px; white-space: nowrap; }
+  .nav-utility-actions { flex: 0 0 auto; gap: 6px; }
+  .nav-utility-actions .nav-desktop-only { display: none; }
+}
