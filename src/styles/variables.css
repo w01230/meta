@@ -1,0 +1,83 @@
+:root {
+  /* 1. 画布与背景 (Canvas & Backgrounds) */
+  --bg-page-gradient: linear-gradient(135deg, #F0F6F2 0%, #F5F6FA 45%, #F0EEF8 100%);
+  --bg-panel-glass: rgba(255, 255, 255, 0.74);
+  --bg-panel-solid: #FFFFFF;
+  --bg-panel-subtle: rgba(255, 255, 255, 0.55);
+  --bg-hover-subtle: rgba(0, 0, 0, 0.035);
+
+  /* 2. 边框与分隔线 (Borders & Dividers) */
+  --border-panel: rgba(255, 255, 255, 0.85);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-divider: #E4E8E2;
+  --border-active: #2E68F8;
+  --border-empty-track: rgba(0, 0, 0, 0.08);
+  --bg-empty-track: rgba(0, 0, 0, 0.04);
+
+  /* 3. 字体颜色 (Typography Colors) */
+  --text-primary: #181A18;       /* 标题与主要数值，极深炭黑 */
+  --text-secondary: #565C54;     /* 次级标签与正文 */
+  --text-muted: #888E84;         /* 微排版、时间戳、说明注记 */
+  --text-link: #2862E8;          /* 交互式超链接专用蓝（对应截图连接行） */
+  --text-inverse: #FFFFFF;
+
+  /* 4. 截图特征色盘 (Screenshot Characteristic Palette) */
+  --accent-blue-solid: #2E68F8;  /* 截图左侧条带首段、核心高亮蓝 */
+  --accent-blue-sky: #6FA2F7;    /* 截图左侧条带第二段 */
+  --accent-blue-periwinkle: #A2C2F8; /* 截图左侧条带第三段 */
+  --accent-mint-tint: #E0ECE7;   /* 截图左侧条带第四段、浅薄荷透色 */
+  --accent-dark-charcoal: #202321; /* 截图右侧条带首段、黑色药丸按钮 */
+  --accent-dark-stripe: #88908A; /* 截图右侧斜纹段 */
+  --accent-light-texture: #DEE2DC; /* 截图右侧浅质感段 */
+  --accent-cream-sand: #F4EDE2;  /* Deal History 浅卡其/奶油色药丸底 */
+  --accent-cream-text: #8A5B18;  /* Deal History 奶油色药丸字体色 */
+
+  /* Legacy & compatibility aliases */
+  --bg-page: #F0F6F2;
+  --bg-card: var(--bg-panel-glass);
+  --bg-card-solid: var(--bg-panel-solid);
+  --bg-card-subtle: var(--bg-panel-subtle);
+  --bg-card-hover: rgba(255, 255, 255, 0.95);
+  --border-outer: #202321;
+  --border-card: var(--border-subtle);
+  --accent-blue: var(--accent-blue-solid);
+  --accent-blue-subtle: #EBF1FD;
+  --accent-mint: var(--accent-mint-tint);
+  --accent-lavender: #E6E5F5;
+
+  /* 5. 状态语义色 (Status Colors) */
+  --status-green: #24824F;
+  --status-green-bg: #EAF5ED;
+  --status-amber: #B45309;
+  --status-amber-bg: #FEF3C7;
+  --status-red: #C53030;
+  --status-red-bg: #FEE2E2;
+
+  /* 6. 纯白圆形动作按钮专有令牌 (White Circular Buttons) */
+  --btn-circle-bg: #FFFFFF;
+  --btn-circle-border: rgba(0, 0, 0, 0.08);
+  --btn-circle-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
+  --btn-circle-hover-bg: #F9FAF8;
+  --btn-circle-hover-border: rgba(0, 0, 0, 0.14);
+  --btn-circle-hover-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
+
+  /* 7. 圆角与几何 (Curvature & Geometry) */
+  --radius-panel: 20px;          /* 主面板与下层两列主卡大圆角 */
+  --radius-card: 14px;           /* 4宫格系统卡片、Deal 列表行圆角 */
+  --radius-ribbon: 12px;         /* 分段进度条圆角 */
+  --radius-pill: 9999px;         /* 导航活动项、状态标签、延迟药丸 */
+  --radius-circle: 50%;          /* 纯白图标按钮、节点国旗头像 */
+  --radius-outer: 20px;
+  --radius-inner: 12px;
+
+  /* 8. 阴影系统 (Shadows) */
+  --shadow-panel: 0 6px 24px rgba(20, 28, 20, 0.035), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.03);
+  --shadow-dropdown: 0 12px 32px rgba(20, 28, 20, 0.12);
+  --shadow-popup: 0 16px 36px rgba(20, 28, 20, 0.12);
+  --shadow-subtle: 0 4px 16px rgba(20, 28, 20, 0.03);
+
+  /* 9. 字体栈 (Typography Stacks) */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
