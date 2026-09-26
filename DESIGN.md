@@ -599,8 +599,8 @@ stateDiagram-v2
    - 承接现有的 `RulesView.tsx`（规则载荷、类型筛选、规则数统计）。
 5. **日志页 (Logs)**：
    - 承接现有的 `LogsView.tsx`（实时 WebSocket 日志流、自动滚动跟随、关键字搜索）。
-6. **配置页 (Config)**：
-   - 承接现有的 `ConfigView.tsx`（外部控制器端口修改、Secret 密钥设置、CORS 排障引导、运行时模式微调）。
+6. **配置入口 (Config)**：
+   - 由 `SettingsModal.tsx` 设置弹窗承接（外部控制器地址与密钥、运行参数、缓存清理），顶栏与底部导航直接打开弹窗，不再使用独立配置页。
 
 ---
 

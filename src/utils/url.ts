@@ -80,7 +80,7 @@ export function checkMixedContentRisk(targetBaseUrl: string): { hasRisk: boolean
   if (isPageHttps && isTargetHttp) {
     return {
       hasRisk: true,
-      message: '当前网页处于 HTTPS 协议下，浏览器会默认阻止向 HTTP 控制台（如 http://127.0.0.1:9090）发送混合内容请求。建议使用 HTTP 访问本控制台，或为核心配置 TLS 证书。'
+      message: '当前页面为 HTTPS，浏览器会拦截向 HTTP 控制器的请求。请改用 HTTP 访问本控制台，或为核心启用 HTTPS。'
     };
   }
 

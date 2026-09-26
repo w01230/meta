@@ -92,16 +92,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     try {
       const success = await setDemoMode(next);
       if (next) {
-        showToast('已开启演示预览模式', 'info');
+        showToast('已进入演示预览模式', 'info');
       } else if (success) {
-        showToast('已退出演示模式，正在建立实时连接', 'success');
+        showToast('已退出演示模式，正在连接控制器', 'success');
       } else {
-        const errorMsg = '退出演示模式失败：无法连接到外部控制器，保持演示模式';
+        const errorMsg = '退出演示模式失败：无法连接控制器，仍保持演示模式';
         setLocalError(errorMsg);
         showToast(errorMsg, 'error');
       }
     } catch {
-      const errorMsg = '退出演示模式失败：无法连接到外部控制器，保持演示模式';
+      const errorMsg = '退出演示模式失败：无法连接控制器，仍保持演示模式';
       setLocalError(errorMsg);
       showToast(errorMsg, 'error');
     } finally {
@@ -122,19 +122,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     if (success) {
       showToast(
         wasDemo
-          ? '已退出演示模式，正在建立实时连接'
-          : '控制器验证成功，正在建立实时连接',
+          ? '已退出演示模式，正在连接控制器'
+          : '验证成功，正在连接控制器',
         'success'
       );
       onClose();
     } else {
       if (wasDemo) {
-        const msg = '退出演示模式失败：无法连接到外部控制器，请检查配置，保持演示模式';
+        const msg = '退出演示模式失败：无法连接控制器，请检查地址与密钥；仍保持演示模式';
         setLocalError(msg);
         showToast(msg, 'error');
       } else {
         setLocalError(null);
-        showToast('连接失败，请检查控制器地址、端口与密钥配置', 'error');
+        showToast('连接失败，请检查地址、端口与密钥', 'error');
       }
     }
   };
@@ -144,9 +144,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsChangingLogLevel(true);
     try {
       await setLogLevel(level);
-      showToast(`日志级别已更新为: ${level}`, 'success');
+      showToast(`日志级别已更新：${level.toUpperCase()}`, 'success');
     } catch (err: unknown) {
-      showToast(`更新日志级别失败: ${(err as Error)?.message}`, 'error');
+      showToast(`更新日志级别失败：${(err as Error)?.message}`, 'error');
     } finally {
       setIsChangingLogLevel(false);
     }
@@ -157,9 +157,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsFlushingFakeip(true);
     try {
       await apiClient.flushFakeipCache();
-      showToast('Fake-IP 缓存已成功清空', 'success');
+      showToast('Fake-IP 映射缓存已清空', 'success');
     } catch (err: unknown) {
-      const msg = (err as Error)?.message || '清理 Fake-IP 缓存失败';
+      const msg = (err as Error)?.message || '清空 Fake-IP 映射缓存失败';
       showToast(msg, 'error');
     } finally {
       setIsFlushingFakeip(false);
@@ -171,20 +171,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsFlushingDns(true);
     try {
       await apiClient.flushDnsCache();
-      showToast('DNS 缓存已成功清空', 'success');
+      showToast('DNS 解析缓存已清空', 'success');
     } catch (err: unknown) {
       const apiErr = err as ApiError;
       if (apiErr?.status === 404) {
-        showToast(apiErr.message || '当前内核版本不支持清理 DNS 缓存 (POST /cache/dns/flush 需 >= v1.19.12)', 'error');
+        showToast(apiErr.message || '当前内核版本不支持清空 DNS 缓存（需内核 >= v1.19.12）', 'error');
       } else {
-        showToast(apiErr?.message || '清理 DNS 缓存失败', 'error');
+        showToast(apiErr?.message || '清空 DNS 解析缓存失败', 'error');
       }
     } finally {
       setIsFlushingDns(false);
     }
   };
 
-  const displayError = localError || (status === 'error' && !demoMode ? (statusError || '无法连接到外部控制器，请检查地址、端口与密钥配置') : null);
+  const displayError = localError || (status === 'error' && !demoMode ? (statusError || '无法连接控制器，请检查地址、端口与密钥') : null);
   const statusLabel = resolveStatusText(status, demoMode, !!version?.version);
   const runtimeVersionToken = resolveRuntimeVersionToken(demoMode, version?.version);
 
@@ -202,8 +202,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="onboarding-notice-box" role="note">
             <Sparkles size={16} color="var(--accent-primary)" />
             <div className="onboarding-notice-text">
-              <strong>首次使用指引：</strong>
-              <span>填写控制器地址；如未设置访问密钥可留空，然后点击圆形按钮测试并保存。也可选择演示预览。</span>
+              <strong>首次使用：</strong>
+              <span>填写控制器地址（密钥未设置可留空），点击 ✓ 测试并保存连接；或点击 ✨ 进入演示预览。</span>
             </div>
           </div>
         )}
@@ -225,7 +225,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div 
               className="status-circle-indicator-wrap" 
               role="status"
-              aria-label={`核心当前状态: ${statusLabel}`}
+              aria-label={`核心状态：${statusLabel}`}
             >
               <span
                 className={`status-circle-indicator status-${status} ${demoMode ? 'demo-active' : ''}`}
@@ -238,7 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {/* Form fields */}
           <div className="form-item">
-            <label className="form-label" htmlFor="modal-ctrl-url">控制器地址 (API Base URL)</label>
+            <label className="form-label" htmlFor="modal-ctrl-url">控制器地址（API Base URL）</label>
             <div className="input-with-icon">
               <Server size={15} className="input-icon" aria-hidden="true" />
               <input
@@ -253,7 +253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="form-item">
-            <label className="form-label" htmlFor="modal-ctrl-secret">访问密钥 (Secret / Token)</label>
+            <label className="form-label" htmlFor="modal-ctrl-secret">访问密钥（Secret / Token）</label>
             <div className="input-with-icon">
               <Key size={15} className="input-icon" aria-hidden="true" />
               <input
@@ -304,17 +304,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 disabled={isTogglingDemo || isSubmitting}
                 aria-label={
                   isTogglingDemo
-                    ? '正在切换演示模式...'
+                    ? '正在切换演示模式…'
                     : demoMode
-                    ? '退出仿真演示'
-                    : '体验演示预览'
+                    ? '退出演示模式'
+                    : '进入演示预览'
                 }
                 data-tooltip={
                   isTogglingDemo
-                    ? '正在切换演示模式...'
+                    ? '正在切换演示模式…'
                     : demoMode
-                    ? '退出仿真演示'
-                    : '体验演示预览'
+                    ? '退出演示模式'
+                    : '进入演示预览'
                 }
               >
                 <Sparkles size={15} className={isTogglingDemo ? 'spin-animation' : ''} aria-hidden="true" />
@@ -328,8 +328,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 className="btn-circle-action size-md primary-check-btn"
                 onClick={handleSaveAndConnect}
                 disabled={isSubmitting || isTogglingDemo}
-                aria-label={isSubmitting ? '正在测试并连接...' : '测试并保存连接'}
-                data-tooltip={isSubmitting ? '正在测试并连接...' : '测试并保存连接'}
+                aria-label={isSubmitting ? '正在测试并连接…' : '测试并保存连接'}
+                data-tooltip={isSubmitting ? '正在测试并连接…' : '测试并保存连接'}
               >
                 {isSubmitting ? (
                   <RefreshCw size={15} className="spin-animation" aria-hidden="true" />
@@ -355,8 +355,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             {runtimeVersionToken && (
               <span 
                 className="version-tag tabular-nums" 
-                data-tooltip={`核心版本: ${version?.version || runtimeVersionToken}`}
-                aria-label={`核心版本: ${version?.version || runtimeVersionToken}`}
+                data-tooltip={`核心版本：${version?.version || runtimeVersionToken}`}
+                aria-label={`核心版本：${version?.version || runtimeVersionToken}`}
               >
                 {runtimeVersionToken}
               </span>
@@ -419,7 +419,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Database size={16} aria-hidden="true" />
-              <h4 id="section-cache-title" className="settings-section-title">缓存维护</h4>
+              <h4 id="section-cache-title" className="settings-section-title">缓存清理</h4>
             </div>
           </div>
 
@@ -429,8 +429,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
               <span>
                 {demoMode
-                  ? '当前处于仿真演示预览模式，已禁用对真实核心的缓存清理操作。'
-                  : '控制器未连接，无法执行缓存清理操作。请先配置并连接外部控制器。'}
+                  ? '演示模式下无法清理真实核心缓存。'
+                  : '控制器未连接，请先完成连接后再清理缓存。'}
               </span>
             </div>
           )}
@@ -447,7 +447,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className="btn-circle-action size-md danger cache-flush-btn"
                   onClick={() => setConfirmFlush('fakeip')}
                   disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
-                  data-tooltip={isFlushingFakeip ? '正在清空 Fake-IP 映射缓存...' : '清空 Fake-IP 映射缓存'}
+                  data-tooltip={isFlushingFakeip ? '正在清空 Fake-IP 映射缓存…' : '清空 Fake-IP 映射缓存'}
                   aria-label={isFlushingFakeip ? '正在清空 Fake-IP 映射缓存' : '清空 Fake-IP 映射缓存'}
                 >
                   <Trash2 size={15} className={isFlushingFakeip ? 'spin-animation' : ''} aria-hidden="true" />
@@ -460,7 +460,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="inline-confirm-content">
                     <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
                     <span className="inline-confirm-text">
-                      确定要清空核心的 Fake-IP 映射缓存吗？清空后当前映射表将被重置，活动连接可能需要重新建立域名解析。
+                      确定清空 Fake-IP 映射缓存？清空后映射表将重置，活动连接可能需重新解析域名。
                     </span>
                   </div>
                   <div className="inline-confirm-actions">
@@ -478,7 +478,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       onClick={handleFlushFakeip}
                       disabled={isFlushingFakeip}
                     >
-                      {isFlushingFakeip ? '清空中...' : '确认清空'}
+                      {isFlushingFakeip ? '清空中…' : '确认清空'}
                     </button>
                   </div>
                 </div>
@@ -498,8 +498,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className="btn-circle-action size-md danger cache-flush-btn"
                   onClick={() => setConfirmFlush('dns')}
                   disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
-                  data-tooltip={isFlushingDns ? '正在清空 DNS 解析缓存...' : '清除 DNS 解析缓存'}
-                  aria-label={isFlushingDns ? '正在清空 DNS 解析缓存' : '清除 DNS 解析缓存'}
+                  data-tooltip={isFlushingDns ? '正在清空 DNS 解析缓存…' : '清空 DNS 解析缓存'}
+                  aria-label={isFlushingDns ? '正在清空 DNS 解析缓存' : '清空 DNS 解析缓存'}
                 >
                   <Trash2 size={15} className={isFlushingDns ? 'spin-animation' : ''} aria-hidden="true" />
                 </button>
@@ -511,7 +511,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="inline-confirm-content">
                     <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
                     <span className="inline-confirm-text">
-                      确定要清空核心的 DNS 解析缓存吗？清空后核心将重新向上游 DNS 查询最新解析记录（需内核版本 &gt;= v1.19.12）。
+                      确定清空 DNS 解析缓存？清空后核心将重新向上游查询最新解析记录（需内核 &gt;= v1.19.12）。
                     </span>
                   </div>
                   <div className="inline-confirm-actions">
@@ -529,7 +529,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       onClick={handleFlushDns}
                       disabled={isFlushingDns}
                     >
-                      {isFlushingDns ? '清空中...' : '确认清空'}
+                      {isFlushingDns ? '清空中…' : '确认清空'}
                     </button>
                   </div>
                 </div>
