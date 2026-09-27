@@ -867,23 +867,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: #FFFFFF;
   box-sizing: border-box;
   overflow: visible;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.96);
   --ring-color: #64748B;
 }
 
 .compact-flag-ring::after {
   content: "";
   position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 6px;
-  height: 6px;
-  border: 1px solid #FFFFFF;
+  right: -1px;
+  bottom: -1px;
+  z-index: 1;
+  width: 5px;
+  height: 5px;
+  border: 0;
   border-radius: 50%;
   background: var(--ring-color);
-  box-shadow: 0 0 0 0.5px rgba(15, 23, 42, 0.12);
 }
 
 /* In the collapsed view, keep the flags at the leading edge and show only
