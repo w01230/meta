@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ControllerProvider } from './context/ControllerContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { ControllerProvider, useController } from './context/ControllerContext';
 import { ToastProvider } from './components/common/Toast';
 import { TooltipProvider } from './components/common/TooltipProvider';
 import { Navbar } from './components/common/Navbar';
@@ -10,13 +10,22 @@ import { ProxiesView } from './components/proxies/ProxiesView';
 import { ConnectionsView } from './components/connections/ConnectionsView';
 import { RulesView } from './components/rules/RulesView';
 import { LogsView } from './components/logs/LogsView';
-
-import { useController } from './context/ControllerContext';
+import { ConnectionStatus } from './types/connection';
 
 export const PRIMARY_TABS = ['overview', 'proxies', 'connections', 'rules', 'logs'];
 
+export function shouldAutoOpenSettings(
+  hasConfiguredController: boolean,
+  status: ConnectionStatus,
+  demoMode: boolean = false,
+  errorDismissed: boolean = false
+): boolean {
+  if (!hasConfiguredController) return true;
+  return !demoMode && status === 'error' && !errorDismissed;
+}
+
 export const AppContent: React.FC = () => {
-  const { hasConfiguredController } = useController();
+  const { hasConfiguredController, status, demoMode } = useController();
 
   // Helper to determine initial tab and settings modal visibility from URL hash
   const [initial] = useState(() => {
@@ -33,12 +42,23 @@ export const AppContent: React.FC = () => {
     () => !hasConfiguredController || initial.openSettings
   );
 
+  const errorDismissedRef = useRef<boolean>(false);
+
   // Auto-open settings modal if controller is not configured
   useEffect(() => {
     if (!hasConfiguredController) {
       setIsSettingsOpen(true);
     }
   }, [hasConfiguredController]);
+
+  // Auto-open settings modal on terminal controller error; reset latch on retry or success
+  useEffect(() => {
+    if (status === 'connecting' || status === 'connected') {
+      errorDismissedRef.current = false;
+    } else if (hasConfiguredController && shouldAutoOpenSettings(true, status, demoMode, errorDismissedRef.current)) {
+      setIsSettingsOpen(true);
+    }
+  }, [status, hasConfiguredController, demoMode]);
 
   // Handle URL hash changes (deep-links & browser forward/back)
   useEffect(() => {
@@ -66,6 +86,9 @@ export const AppContent: React.FC = () => {
 
   const handleCloseSettings = () => {
     setIsSettingsOpen(false);
+    if (status === 'error') {
+      errorDismissedRef.current = true;
+    }
     // If the hash is currently config, sync it back to currentTab so re-closing doesn't leave lingering #/config
     const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
     if (rawHash === 'config') {

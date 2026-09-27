@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PRIMARY_TABS } from '../App';
+import { PRIMARY_TABS, shouldAutoOpenSettings } from '../App';
 import { resolveStatusText } from '../utils/status';
 import { MihomoApiClient, ApiError } from '../services/apiClient';
 import { resolveRuntimeVersionToken } from '../components/common/SettingsModal';
@@ -164,6 +164,42 @@ describe('Navigation and Consolidated Settings Modal Integration', () => {
       expect(resolveRuntimeVersionToken(false, undefined)).toBe(null);
       expect(resolveRuntimeVersionToken(false, '')).toBe(null);
       expect(resolveRuntimeVersionToken(false, 'mihomo')).toBe(null);
+    });
+  });
+
+  describe('Controller Auto-Open Settings Policy', () => {
+    it('auto-opens when controller is unconfigured regardless of status', () => {
+      expect(shouldAutoOpenSettings(false, 'disconnected')).toBe(true);
+      expect(shouldAutoOpenSettings(false, 'connecting')).toBe(true);
+      expect(shouldAutoOpenSettings(false, 'connected')).toBe(true);
+      expect(shouldAutoOpenSettings(false, 'error')).toBe(true);
+    });
+
+    it('suppresses auto-open during configured connecting, disconnected, and connected states', () => {
+      expect(shouldAutoOpenSettings(true, 'connecting', false, false)).toBe(false);
+      expect(shouldAutoOpenSettings(true, 'disconnected', false, false)).toBe(false);
+      expect(shouldAutoOpenSettings(true, 'connected', false, false)).toBe(false);
+    });
+
+    it('auto-opens on configured terminal error when not dismissed and not in demo mode', () => {
+      expect(shouldAutoOpenSettings(true, 'error', false, false)).toBe(true);
+    });
+
+    it('suppresses auto-open on error when in demo mode or already dismissed', () => {
+      expect(shouldAutoOpenSettings(true, 'error', true, false)).toBe(false);
+      expect(shouldAutoOpenSettings(true, 'error', false, true)).toBe(false);
+    });
+
+    it('re-evaluates correctly when dismissal is cleared on retry', () => {
+      let dismissed = true;
+      expect(shouldAutoOpenSettings(true, 'error', false, dismissed)).toBe(false);
+
+      // On new retry (status becomes connecting), dismissal is reset
+      dismissed = false;
+      expect(shouldAutoOpenSettings(true, 'connecting', false, dismissed)).toBe(false);
+
+      // Subsequent terminal failure re-opens
+      expect(shouldAutoOpenSettings(true, 'error', false, dismissed)).toBe(true);
     });
   });
 });

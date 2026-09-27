@@ -92,16 +92,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     try {
       const success = await setDemoMode(next);
       if (next) {
-        showToast('已进入演示预览模式', 'info');
+        showToast('已开启演示模式', 'info');
       } else if (success) {
         showToast('已退出演示模式，正在连接控制器', 'success');
       } else {
-        const errorMsg = '退出演示模式失败：无法连接控制器，仍保持演示模式';
+        const errorMsg = '退出演示模式失败：无法连接控制器，已保持演示模式';
         setLocalError(errorMsg);
         showToast(errorMsg, 'error');
       }
     } catch {
-      const errorMsg = '退出演示模式失败：无法连接控制器，仍保持演示模式';
+      const errorMsg = '退出演示模式失败：无法连接控制器，已保持演示模式';
       setLocalError(errorMsg);
       showToast(errorMsg, 'error');
     } finally {
@@ -123,18 +123,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       showToast(
         wasDemo
           ? '已退出演示模式，正在连接控制器'
-          : '验证成功，正在连接控制器',
+          : '验证成功，已保存配置；正在连接实时数据',
         'success'
       );
       onClose();
     } else {
       if (wasDemo) {
-        const msg = '退出演示模式失败：无法连接控制器，请检查地址与密钥；仍保持演示模式';
+        const msg = '退出演示模式失败：无法连接控制器，请检查地址与密钥（已保持演示模式）';
         setLocalError(msg);
         showToast(msg, 'error');
       } else {
         setLocalError(null);
-        showToast('连接失败，请检查地址、端口与密钥', 'error');
+        showToast('无法连接控制器，请检查地址、端口与密钥', 'error');
       }
     }
   };
@@ -157,9 +157,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsFlushingFakeip(true);
     try {
       await apiClient.flushFakeipCache();
-      showToast('Fake-IP 映射缓存已清空', 'success');
+      showToast('Fake-IP 缓存已清空', 'success');
     } catch (err: unknown) {
-      const msg = (err as Error)?.message || '清空 Fake-IP 映射缓存失败';
+      const msg = (err as Error)?.message || '清空 Fake-IP 缓存失败';
       showToast(msg, 'error');
     } finally {
       setIsFlushingFakeip(false);
@@ -171,13 +171,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsFlushingDns(true);
     try {
       await apiClient.flushDnsCache();
-      showToast('DNS 解析缓存已清空', 'success');
+      showToast('DNS 缓存已清空', 'success');
     } catch (err: unknown) {
       const apiErr = err as ApiError;
       if (apiErr?.status === 404) {
-        showToast(apiErr.message || '当前内核版本不支持清空 DNS 缓存（需内核 >= v1.19.12）', 'error');
+        showToast(apiErr.message || '当前内核版本不支持清空 DNS 缓存（需 v1.19.12 或更新版本）', 'error');
       } else {
-        showToast(apiErr?.message || '清空 DNS 解析缓存失败', 'error');
+        showToast(apiErr?.message || '清空 DNS 缓存失败', 'error');
       }
     } finally {
       setIsFlushingDns(false);
@@ -202,20 +202,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="onboarding-notice-box" role="note">
             <Sparkles size={16} color="var(--accent-primary)" />
             <div className="onboarding-notice-text">
-              <strong>首次使用：</strong>
-              <span>填写控制器地址（密钥未设置可留空），点击 ✓ 测试并保存连接；或点击 ✨ 进入演示预览。</span>
+              <strong>首次配置：</strong>
+              <span>输入控制器地址；未设置访问密钥可留空。点击 ✓ 测试并保存，或点击 ✨ 开启演示模式。</span>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            SECTION 1: External Controller Connection
+            SECTION 1: Controller Connection
            ======================================================== */}
         <section className="settings-modal-section" aria-labelledby="section-controller-title">
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Server size={16} aria-hidden="true" />
-              <h4 id="section-controller-title" className="settings-section-title">外部控制器</h4>
+              <h4 id="section-controller-title" className="settings-section-title">控制器连接</h4>
             </div>
           </div>
 
@@ -225,7 +225,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div 
               className="status-circle-indicator-wrap" 
               role="status"
-              aria-label={`核心状态：${statusLabel}`}
+              aria-label={`连接状态：${statusLabel}`}
             >
               <span
                 className={`status-circle-indicator status-${status} ${demoMode ? 'demo-active' : ''}`}
@@ -238,7 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {/* Form fields */}
           <div className="form-item">
-            <label className="form-label" htmlFor="modal-ctrl-url">控制器地址（API Base URL）</label>
+            <label className="form-label" htmlFor="modal-ctrl-url">控制器地址</label>
             <div className="input-with-icon">
               <Server size={15} className="input-icon" aria-hidden="true" />
               <input
@@ -253,7 +253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="form-item">
-            <label className="form-label" htmlFor="modal-ctrl-secret">访问密钥（Secret / Token）</label>
+            <label className="form-label" htmlFor="modal-ctrl-secret">访问密钥</label>
             <div className="input-with-icon">
               <Key size={15} className="input-icon" aria-hidden="true" />
               <input
@@ -304,17 +304,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 disabled={isTogglingDemo || isSubmitting}
                 aria-label={
                   isTogglingDemo
-                    ? '正在切换演示模式…'
+                    ? (demoMode ? '正在退出演示…' : '正在开启演示…')
                     : demoMode
-                    ? '退出演示模式'
-                    : '进入演示预览'
+                    ? '退出演示并连接控制器'
+                    : '开启演示模式'
                 }
                 data-tooltip={
                   isTogglingDemo
-                    ? '正在切换演示模式…'
+                    ? (demoMode ? '正在退出演示…' : '正在开启演示…')
                     : demoMode
-                    ? '退出演示模式'
-                    : '进入演示预览'
+                    ? '退出演示并连接控制器'
+                    : '开启演示模式'
                 }
               >
                 <Sparkles size={15} className={isTogglingDemo ? 'spin-animation' : ''} aria-hidden="true" />
@@ -328,8 +328,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 className="btn-circle-action size-md primary-check-btn"
                 onClick={handleSaveAndConnect}
                 disabled={isSubmitting || isTogglingDemo}
-                aria-label={isSubmitting ? '正在测试并连接…' : '测试并保存连接'}
-                data-tooltip={isSubmitting ? '正在测试并连接…' : '测试并保存连接'}
+                aria-label={isSubmitting ? '正在验证并连接…' : '测试并保存连接'}
+                data-tooltip={isSubmitting ? '正在验证并连接…' : '测试并保存连接'}
               >
                 {isSubmitting ? (
                   <RefreshCw size={15} className="spin-animation" aria-hidden="true" />
@@ -344,13 +344,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <div className="settings-section-divider" aria-hidden="true" />
 
         {/* ========================================================
-            SECTION 2: Runtime Parameters
+            SECTION 2: Operational & Display Settings
            ======================================================== */}
         <section className="settings-modal-section" aria-labelledby="section-runtime-title">
           <div className="settings-section-header">
             <div className="settings-section-title-wrap">
               <Sliders size={16} aria-hidden="true" />
-              <h4 id="section-runtime-title" className="settings-section-title">运行参数</h4>
+              <h4 id="section-runtime-title" className="settings-section-title">运行与显示</h4>
             </div>
             {runtimeVersionToken && (
               <span 
@@ -367,9 +367,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             {/* Log Level */}
             <div className="runtime-setting-row runtime-setting-row-segmented">
               <div className="setting-desc">
-                <span className="setting-name">核心日志等级</span>
+                <span className="setting-name">核心日志级别</span>
               </div>
-              <div className="mode-segmented-capsule capsule-log-levels" role="group" aria-label="核心日志等级">
+              <div className="mode-segmented-capsule capsule-log-levels" role="group" aria-label="核心日志级别">
                 {(['info', 'warning', 'error', 'debug', 'silent'] as LogLevel[]).map((lvl) => (
                   <button
                     key={lvl}
@@ -429,8 +429,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
               <span>
                 {demoMode
-                  ? '演示模式下无法清理真实核心缓存。'
-                  : '控制器未连接，请先完成连接后再清理缓存。'}
+                  ? '演示模式下无法清空真实核心的缓存。'
+                  : '连接控制器后可清空缓存。'}
               </span>
             </div>
           )}
@@ -440,15 +440,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div className="cache-maintenance-item">
               <div className="cache-maintenance-row">
                 <div className="setting-desc">
-                  <span className="setting-name">Fake-IP 映射缓存</span>
+                  <span className="setting-name">Fake-IP 缓存</span>
                 </div>
                 <button
                   type="button"
                   className="btn-circle-action size-md danger cache-flush-btn"
                   onClick={() => setConfirmFlush('fakeip')}
                   disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
-                  data-tooltip={isFlushingFakeip ? '正在清空 Fake-IP 映射缓存…' : '清空 Fake-IP 映射缓存'}
-                  aria-label={isFlushingFakeip ? '正在清空 Fake-IP 映射缓存' : '清空 Fake-IP 映射缓存'}
+                  data-tooltip={isFlushingFakeip ? '正在清空 Fake-IP 缓存…' : '清空 Fake-IP 缓存'}
+                  aria-label={isFlushingFakeip ? '正在清空 Fake-IP 缓存' : '清空 Fake-IP 缓存'}
                 >
                   <Trash2 size={15} className={isFlushingFakeip ? 'spin-animation' : ''} aria-hidden="true" />
                 </button>
@@ -460,7 +460,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="inline-confirm-content">
                     <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
                     <span className="inline-confirm-text">
-                      确定清空 Fake-IP 映射缓存？清空后映射表将重置，活动连接可能需重新解析域名。
+                      确定清空 Fake-IP 缓存？域名映射将重置，活动连接可能需要重新解析域名。
                     </span>
                   </div>
                   <div className="inline-confirm-actions">
@@ -491,15 +491,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div className="cache-maintenance-item">
               <div className="cache-maintenance-row">
                 <div className="setting-desc">
-                  <span className="setting-name">DNS 解析缓存</span>
+                  <span className="setting-name">DNS 缓存</span>
                 </div>
                 <button
                   type="button"
                   className="btn-circle-action size-md danger cache-flush-btn"
                   onClick={() => setConfirmFlush('dns')}
                   disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
-                  data-tooltip={isFlushingDns ? '正在清空 DNS 解析缓存…' : '清空 DNS 解析缓存'}
-                  aria-label={isFlushingDns ? '正在清空 DNS 解析缓存' : '清空 DNS 解析缓存'}
+                  data-tooltip={isFlushingDns ? '正在清空 DNS 缓存…' : '清空 DNS 缓存'}
+                  aria-label={isFlushingDns ? '正在清空 DNS 缓存' : '清空 DNS 缓存'}
                 >
                   <Trash2 size={15} className={isFlushingDns ? 'spin-animation' : ''} aria-hidden="true" />
                 </button>
@@ -511,7 +511,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="inline-confirm-content">
                     <AlertTriangle size={15} color="var(--status-amber)" aria-hidden="true" />
                     <span className="inline-confirm-text">
-                      确定清空 DNS 解析缓存？清空后核心将重新向上游查询最新解析记录（需内核 &gt;= v1.19.12）。
+                      确定清空 DNS 缓存？核心将重新查询域名记录（需内核 v1.19.12 或更新版本）。
                     </span>
                   </div>
                   <div className="inline-confirm-actions">
