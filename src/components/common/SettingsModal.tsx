@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from './Modal';
-import { useController } from '../../context/ControllerContext';
+import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { useToast } from './Toast';
 import { resolveStatusText } from '../../utils/status';
 import { checkMixedContentRisk } from '../../utils/url';
 import { extractVersionToken } from '../../utils/format';
 import { LogLevel } from '../../types/api';
 import { ApiError } from '../../services/apiClient';
+import packageInfo from '../../../package.json';
 import { 
   Server, 
   Key, 
@@ -72,6 +73,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [isFlushingFakeip, setIsFlushingFakeip] = useState(false);
   const [isFlushingDns, setIsFlushingDns] = useState(false);
 
+  const connectionStateRef = useRef({ baseUrl, secret, demoMode, status, apiClient });
+  connectionStateRef.current = { baseUrl, secret, demoMode, status, apiClient };
+
   useEffect(() => {
     if (isOpen) {
       setInputUrl(baseUrl);
@@ -80,6 +84,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setConfirmFlush(null);
     }
   }, [isOpen, baseUrl, secret]);
+
+  useEffect(() => {
+    setConfirmFlush(null);
+  }, [baseUrl, secret, demoMode, status]);
 
   const mixedContentRisk = checkMixedContentRisk(inputUrl);
   const isRealConnected = !demoMode && status === 'connected';
@@ -146,19 +154,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       await setLogLevel(level);
       showToast(`日志级别已更新：${level.toUpperCase()}`, 'success');
     } catch (err: unknown) {
-      showToast(`更新日志级别失败：${(err as Error)?.message}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`更新日志级别失败：${(err as Error)?.message}`, 'error');
+      }
     } finally {
       setIsChangingLogLevel(false);
     }
   };
 
   const handleFlushFakeip = async () => {
+    if (!isRealConnected) {
+      setConfirmFlush(null);
+      return;
+    }
+    const connectionState = connectionStateRef.current;
+    const client = apiClient;
     setConfirmFlush(null);
     setIsFlushingFakeip(true);
     try {
-      await apiClient.flushFakeipCache();
+      await client.flushFakeipCache();
+      const currentState = connectionStateRef.current;
+      if (currentState.baseUrl !== connectionState.baseUrl || currentState.secret !== connectionState.secret ||
+          currentState.demoMode !== connectionState.demoMode || currentState.status !== connectionState.status ||
+          currentState.apiClient !== client) return;
       showToast('Fake-IP 缓存已清空', 'success');
     } catch (err: unknown) {
+      const currentState = connectionStateRef.current;
+      if (currentState.baseUrl !== connectionState.baseUrl || currentState.secret !== connectionState.secret ||
+          currentState.demoMode !== connectionState.demoMode || currentState.status !== connectionState.status ||
+          currentState.apiClient !== client) return;
       const msg = (err as Error)?.message || '清空 Fake-IP 缓存失败';
       showToast(msg, 'error');
     } finally {
@@ -167,12 +191,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   };
 
   const handleFlushDns = async () => {
+    if (!isRealConnected) {
+      setConfirmFlush(null);
+      return;
+    }
+    const connectionState = connectionStateRef.current;
+    const client = apiClient;
     setConfirmFlush(null);
     setIsFlushingDns(true);
     try {
-      await apiClient.flushDnsCache();
+      await client.flushDnsCache();
+      const currentState = connectionStateRef.current;
+      if (currentState.baseUrl !== connectionState.baseUrl || currentState.secret !== connectionState.secret ||
+          currentState.demoMode !== connectionState.demoMode || currentState.status !== connectionState.status ||
+          currentState.apiClient !== client) return;
       showToast('DNS 缓存已清空', 'success');
     } catch (err: unknown) {
+      const currentState = connectionStateRef.current;
+      if (currentState.baseUrl !== connectionState.baseUrl || currentState.secret !== connectionState.secret ||
+          currentState.demoMode !== connectionState.demoMode || currentState.status !== connectionState.status ||
+          currentState.apiClient !== client) return;
       const apiErr = err as ApiError;
       if (apiErr?.status === 404) {
         showToast(apiErr.message || '当前内核版本不支持清空 DNS 缓存（需 v1.19.12 或更新版本）', 'error');
@@ -352,15 +390,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <Sliders size={16} aria-hidden="true" />
               <h4 id="section-runtime-title" className="settings-section-title">运行与显示</h4>
             </div>
-            {runtimeVersionToken && (
-              <span 
-                className="version-tag tabular-nums" 
-                data-tooltip={`核心版本：${version?.version || runtimeVersionToken}`}
-                aria-label={`核心版本：${version?.version || runtimeVersionToken}`}
-              >
-                {runtimeVersionToken}
+            <div className="settings-version-tags">
+              <span className="version-tag tabular-nums" aria-label={`应用版本：${packageInfo.version}`}>
+                应用版本 {packageInfo.version}
               </span>
-            )}
+              {runtimeVersionToken && (
+                <span
+                  className="version-tag tabular-nums"
+                  data-tooltip={`核心版本：${version?.version || runtimeVersionToken}`}
+                  aria-label={`核心版本：${version?.version || runtimeVersionToken}`}
+                >
+                  {runtimeVersionToken}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="runtime-settings-list">
@@ -476,7 +519,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       type="button"
                       className="pill-btn size-sm danger"
                       onClick={handleFlushFakeip}
-                      disabled={isFlushingFakeip}
+                      disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
                     >
                       {isFlushingFakeip ? '清空中…' : '确认清空'}
                     </button>
@@ -527,7 +570,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       type="button"
                       className="pill-btn size-sm danger"
                       onClick={handleFlushDns}
-                      disabled={isFlushingDns}
+                      disabled={!isRealConnected || isFlushingFakeip || isFlushingDns}
                     >
                       {isFlushingDns ? '清空中…' : '确认清空'}
                     </button>

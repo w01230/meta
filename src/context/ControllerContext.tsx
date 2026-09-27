@@ -49,9 +49,7 @@ import {
 interface ControllerContextType {
   // Config & State
   baseUrl: string;
-  setBaseUrl: (url: string) => void;
   secret: string;
-  setSecret: (sec: string) => void;
   hasConfiguredController: boolean;
   hideGlobal: boolean;
   setHideGlobal: (hide: boolean) => void;
@@ -86,6 +84,7 @@ interface ControllerContextType {
   switchProxy: (groupName: string, selectedNode: string) => Promise<void>;
   unfixProxy: (groupName: string) => Promise<void>;
   testProxyDelay: (nodeName: string) => Promise<number>;
+  testProxyDelayBatch: (nodeNames: string[]) => Promise<void>;
   updateConfigMode: (mode: RunMode) => Promise<void>;
   updateConfigField: (patch: Partial<MihomoConfig>) => Promise<void>;
   closeConnection: (id: string) => Promise<void>;
@@ -96,36 +95,240 @@ interface ControllerContextType {
 
 const ControllerContext = createContext<ControllerContextType | null>(null);
 
-const STORAGE_KEY_BASE_URL = 'meta_dashboard_base_url';
-const SESSION_KEY_SECRET = 'meta_dashboard_secret';
+export const STORAGE_KEY_BASE_URL = 'meta_dashboard_base_url';
+export const SESSION_KEY_BOUND_SECRET = 'meta_dashboard_session_bound_secret_v1';
 const MAX_TRAFFIC_CHART_POINTS = 900;
 const MAX_MEMORY_CHART_POINTS = 30;
 const MAX_LOG_COUNT = 300;
 
+export class ActionCancelledError extends Error {
+  public readonly isCancelled = true;
+
+  constructor(message = 'Action cancelled due to controller reconnection or source switch') {
+    super(message);
+    this.name = 'ActionCancelledError';
+    Object.setPrototypeOf(this, ActionCancelledError.prototype);
+  }
+}
+
+export function isActionCancelledError(err: unknown): err is ActionCancelledError {
+  return (
+    err instanceof ActionCancelledError ||
+    (typeof err === 'object' &&
+      err !== null &&
+      (err as { isCancelled?: boolean }).isCancelled === true &&
+      (err as { name?: string }).name === 'ActionCancelledError')
+  );
+}
+
+export interface BoundSessionRecord {
+  normalizedUrl: string;
+  secret: string;
+}
+
+export interface StorageSnapshot {
+  baseUrl: string;
+  hasConfiguredController: boolean;
+  secret: string;
+}
+
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null);
+    return storage ? storage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetLocalStorage(key: string, value: string): void {
+  try {
+    const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (storage) {
+      storage.setItem(key, value);
+    }
+  } catch {
+    // Storage quota exceeded or disabled in private browsing
+  }
+}
+
+function safeGetSessionStorage(key: string): string | null {
+  try {
+    const storage = typeof window !== 'undefined' ? window.sessionStorage : (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+    return storage ? storage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetSessionBoundSecret(url: string, secret: string): void {
+  try {
+    const storage = typeof window !== 'undefined' ? window.sessionStorage : (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+    if (storage) {
+      const record: BoundSessionRecord = {
+        normalizedUrl: normalizeBaseUrl(url),
+        secret
+      };
+      storage.setItem(SESSION_KEY_BOUND_SECRET, JSON.stringify(record));
+    }
+  } catch {
+    // Storage quota exceeded or disabled in private browsing
+  }
+}
+
+/**
+ * Safely parses the raw JSON session record and validates its structure.
+ * Returns null if raw is missing, malformed JSON, or missing required string fields.
+ */
+export function parseBoundSecretRecord(raw: string | null | undefined): BoundSessionRecord | null {
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      typeof parsed.normalizedUrl === 'string' &&
+      parsed.normalizedUrl.trim().length > 0 &&
+      typeof parsed.secret === 'string'
+    ) {
+      return {
+        normalizedUrl: normalizeBaseUrl(parsed.normalizedUrl),
+        secret: parsed.secret
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the secret to restore on startup.
+ * Only restores secret if the parsed JSON record's normalizedUrl matches the persisted localStorage URL.
+ * Never restores legacy plain secret or unbound values.
+ */
+export function resolveRestoredSecret(
+  persistedUrl: string | null | undefined,
+  rawRecord: string | null | undefined
+): string {
+  if (typeof persistedUrl !== 'string' || !persistedUrl.trim()) {
+    return '';
+  }
+  const record = parseBoundSecretRecord(rawRecord);
+  if (!record) {
+    return '';
+  }
+  if (normalizeBaseUrl(persistedUrl) === record.normalizedUrl) {
+    return record.secret;
+  }
+  return '';
+}
+
+/**
+ * Reads localStorage and sessionStorage once at provider boot to create an atomic snapshot.
+ * Prevents cross-tab timing races from pairing an updated URL from read 1 with an old secret from read 2.
+ */
+export function loadInitialControllerSnapshot(
+  getLocalStorageItem: (key: string) => string | null = safeGetLocalStorage,
+  getSessionStorageItem: (key: string) => string | null = safeGetSessionStorage
+): StorageSnapshot {
+  const persistedUrl = getLocalStorageItem(STORAGE_KEY_BASE_URL);
+  const rawRecord = getSessionStorageItem(SESSION_KEY_BOUND_SECRET);
+
+  const hasConfiguredController = typeof persistedUrl === 'string' && persistedUrl.trim().length > 0;
+  const baseUrl = hasConfiguredController ? persistedUrl : 'http://127.0.0.1:9090';
+  const secret = resolveRestoredSecret(persistedUrl, rawRecord);
+
+  return {
+    baseUrl,
+    hasConfiguredController,
+    secret
+  };
+}
+
+/**
+ * Guard that verifies an in-flight async action is still operating on the active
+ * connection generation, API client instance, and demo mode.
+ * Prevents stale responses from previous controllers or demo modes from overwriting active state.
+ */
+export function isActionGenerationValid(
+  actionGen: number,
+  currentGen: number,
+  actionClient: unknown,
+  currentClient: unknown,
+  actionIsDemo: boolean,
+  currentIsDemo: boolean
+): boolean {
+  return (
+    actionGen === currentGen &&
+    actionClient === currentClient &&
+    actionIsDemo === currentIsDemo
+  );
+}
+
+/**
+ * Executes batch proxy delay testing sequentially against an active generation snapshot.
+ * Immediately stops before invoking the next node if the generation/client/mode is cancelled,
+ * preventing cross-controller node probing races.
+ */
+export async function executeBatchProxyDelay(
+  nodeNames: string[],
+  isValid: () => boolean,
+  testSingleNode: (nodeName: string) => Promise<number>
+): Promise<void> {
+  for (const nodeName of nodeNames) {
+    if (!isValid()) {
+      throw new ActionCancelledError('Batch proxy delay cancelled due to controller reconnection or source switch');
+    }
+
+    try {
+      await testSingleNode(nodeName);
+      if (!isValid()) {
+        throw new ActionCancelledError('Batch proxy delay cancelled due to controller reconnection or source switch');
+      }
+    } catch (err: unknown) {
+      if (isActionCancelledError(err) || !isValid()) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      // Non-cancellation error for an individual node (e.g. timeout) - continue if still valid.
+    }
+  }
+
+  if (!isValid()) {
+    throw new ActionCancelledError('Batch proxy delay cancelled due to controller reconnection or source switch');
+  }
+}
+
 export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [initialSnapshot] = useState<StorageSnapshot>(loadInitialControllerSnapshot);
+
   // Base URL stored in localStorage, secret strictly in sessionStorage or memory
-  const [baseUrl, setBaseUrlState] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_BASE_URL) || 'http://127.0.0.1:9090';
-  });
+  const [baseUrl, setBaseUrlState] = useState<string>(() => initialSnapshot.baseUrl);
 
   // Check if controller URL was explicitly saved in localStorage (non-empty)
-  const [hasConfiguredController, setHasConfiguredController] = useState<boolean>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_BASE_URL);
-    return typeof saved === 'string' && saved.trim().length > 0;
-  });
+  const [hasConfiguredController, setHasConfiguredController] = useState<boolean>(() => initialSnapshot.hasConfiguredController);
 
   const [hideGlobal, setHideGlobalState] = useState<boolean>(() => {
-    return getStoredHideGlobal();
+    try {
+      return getStoredHideGlobal();
+    } catch {
+      return false;
+    }
   });
 
   const setHideGlobal = (val: boolean) => {
     setHideGlobalState(val);
-    setStoredHideGlobal(val);
+    try {
+      setStoredHideGlobal(val);
+    } catch {
+      // Ignore storage errors
+    }
   };
 
-  const [secret, setSecretState] = useState<string>(() => {
-    return sessionStorage.getItem(SESSION_KEY_SECRET) || '';
-  });
+  const [secret, setSecretState] = useState<string>(() => initialSnapshot.secret);
 
   const [demoMode, setDemoModeState] = useState<boolean>(false);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -176,18 +379,6 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const logsWsRef = useRef<MihomoWsStream<LogTick> | null>(null);
   const demoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const setBaseUrl = (url: string) => {
-    const normalized = normalizeBaseUrl(url);
-    setBaseUrlState(normalized);
-    localStorage.setItem(STORAGE_KEY_BASE_URL, normalized);
-    apiClientRef.current.updateConfig(normalized, secret);
-  };
-
-  const setSecret = (sec: string) => {
-    setSecretState(sec);
-    sessionStorage.setItem(SESSION_KEY_SECRET, sec);
-    apiClientRef.current.updateConfig(baseUrl, sec);
-  };
 
   const cleanupWebSockets = useCallback(() => {
     wsHealthRef.current = { traffic: false, connections: false };
@@ -230,9 +421,25 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setProxies({});
     setRules([]);
     setConnections([]);
+    setLogs([]);
+    setUnreadLogCount(0);
     setVersion(null);
     setConfig(null);
   }, []);
+
+  const isCurrentActionValid = useCallback(
+    (actionGen: number, client: MihomoApiClient | null, isDemo: boolean): boolean => {
+      return isActionGenerationValid(
+        actionGen,
+        connectGenRef.current,
+        client,
+        apiClientRef.current,
+        isDemo,
+        demoModeRef.current
+      );
+    },
+    []
+  );
 
   // Real connection initializer with request generation counter and atomic demo exit
   const connectController = useCallback(async (targetUrl?: string, targetSecret?: string): Promise<boolean> => {
@@ -277,16 +484,23 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (outcome.shouldExitDemo) {
         setDemoModeState(false);
         demoModeRef.current = false;
+        setCurrentTraffic(null);
+        setTrafficHistory([]);
+        setCurrentMemory(null);
+        setMemoryHistory([]);
+        setLogs([]);
+        setUnreadLogCount(0);
       }
 
       // Commit validated credentials to active state and storage
       if (outcome.shouldCommitCredentials) {
         setBaseUrlState(url);
-        localStorage.setItem(STORAGE_KEY_BASE_URL, url);
         setSecretState(sec);
-        sessionStorage.setItem(SESSION_KEY_SECRET, sec);
         apiClientRef.current = client;
         setHasConfiguredController(true);
+
+        safeSetLocalStorage(STORAGE_KEY_BASE_URL, url);
+        safeSetSessionBoundSecret(url, sec);
       }
 
       setVersion(handshake.version);
@@ -403,8 +617,9 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       logsWsRef.current = null;
     }
 
+    const logGen = connectGenRef.current;
     logsWsRef.current = subscribeLogs(baseUrl, secret, logLevel, (logItem) => {
-      if (demoModeRef.current) return;
+      if (logGen !== connectGenRef.current || demoModeRef.current) return;
       const item: LogTick = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         type: logItem.type,
@@ -443,8 +658,11 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setRules([...DEMO_RULES]);
       setConnections(createInitialDemoConnections());
       setLogs([...INITIAL_DEMO_LOGS]);
+      setUnreadLogCount(0);
       setCurrentTraffic({ up: 120000, down: 1850000 });
+      setTrafficHistory([]);
       setCurrentMemory({ inuse: 68157440, oslimit: 17179869184 });
+      setMemoryHistory([]);
       setTrafficTotal({ upTotal: 104857600, downTotal: 1073741824 });
       return true;
     } else {
@@ -528,12 +746,22 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!demoMode && hasConfiguredController) {
       connectController();
     }
-    return () => cleanupStreams();
+    return () => {
+      ++connectGenRef.current;
+      cleanupStreams();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh All: propagate errors so caller can report failure instead of claiming success
   const refreshAll = async () => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setProxies({ ...DEMO_PROXIES });
       setRules([...DEMO_RULES]);
       return;
@@ -541,11 +769,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (status === 'connected') {
       try {
         const [p, r, c, cfg] = await Promise.all([
-          apiClientRef.current.getProxies(),
-          apiClientRef.current.getRules(),
-          apiClientRef.current.getConnections(),
-          apiClientRef.current.getConfigs()
+          client.getProxies(),
+          client.getRules(),
+          client.getConnections(),
+          client.getConfigs()
         ]);
+        if (!isCurrentActionValid(actionGen, client, isDemo)) {
+          throw new ActionCancelledError();
+        }
         setProxies(p.proxies || {});
         setRules(r.rules || []);
         setConnections(c.connections || []);
@@ -555,6 +786,9 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setConfig({ ...cfg, 'log-level': effectiveLogLevel });
         }
       } catch (err: unknown) {
+        if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+          throw isActionCancelledError(err) ? err : new ActionCancelledError();
+        }
         const msg = (err as Error)?.message || '刷新数据失败';
         setStatusError(msg);
         throw err; // Re-throw so Navbar knows refresh failed!
@@ -565,7 +799,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const switchProxy = async (groupName: string, selectedNode: string) => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setProxies((prev) => {
         const currentGroup = prev[groupName];
         if (!currentGroup) return prev;
@@ -582,14 +823,34 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    await apiClientRef.current.switchProxy(groupName, selectedNode);
-    // Refresh proxies after switch
-    const p = await apiClientRef.current.getProxies();
-    setProxies(p.proxies || {});
+    try {
+      await client.switchProxy(groupName, selectedNode);
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      // Refresh proxies after switch
+      const p = await client.getProxies();
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      setProxies(p.proxies || {});
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
   };
 
   const unfixProxy = async (groupName: string) => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setProxies((prev) => {
         const currentGroup = prev[groupName];
         if (!currentGroup) return prev;
@@ -606,15 +867,35 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    await apiClientRef.current.unfixProxy(groupName);
-    const p = await apiClientRef.current.getProxies();
-    setProxies(p.proxies || {});
+    try {
+      await client.unfixProxy(groupName);
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      const p = await client.getProxies();
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      setProxies(p.proxies || {});
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
   };
 
   const testProxyDelay = async (nodeName: string): Promise<number> => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
       // Simulate test delay with realistic jitter
       await new Promise((res) => setTimeout(res, 300));
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       const simulatedDelay = Math.floor(30 + Math.random() * 90);
       setProxies((prev) => {
         const node = prev[nodeName];
@@ -631,30 +912,71 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return simulatedDelay;
     }
 
-    const delay = await apiClientRef.current.testProxyDelay(nodeName);
-    // Update local state for immediate feedback
-    setProxies((prev) => {
-      const node = prev[nodeName];
-      if (!node) return prev;
-      const history = [{ time: new Date().toISOString(), delay }, ...(node.history || [])];
-      return {
-        ...prev,
-        [nodeName]: {
-          ...node,
-          history
-        }
-      };
-    });
-    return delay;
+    try {
+      const delay = await client.testProxyDelay(nodeName);
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      // Update local state for immediate feedback
+      setProxies((prev) => {
+        const node = prev[nodeName];
+        if (!node) return prev;
+        const history = [{ time: new Date().toISOString(), delay }, ...(node.history || [])];
+        return {
+          ...prev,
+          [nodeName]: {
+            ...node,
+            history
+          }
+        };
+      });
+      return delay;
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
+  };
+
+  const testProxyDelayBatch = async (nodeNames: string[]): Promise<void> => {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    const isValid = () => isCurrentActionValid(actionGen, client, isDemo);
+
+    return executeBatchProxyDelay(
+      nodeNames,
+      isValid,
+      (name) => testProxyDelay(name)
+    );
   };
 
   const updateConfigMode = async (mode: RunMode) => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setConfig((prev) => (prev ? { ...prev, mode } : prev));
       return;
     }
-    await apiClientRef.current.updateConfigs({ mode });
-    setConfig((prev) => (prev ? { ...prev, mode } : prev));
+    try {
+      await client.updateConfigs({ mode });
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      setConfig((prev) => (prev ? { ...prev, mode } : prev));
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
   };
 
   const updateConfigField = useCallback(async (patch: Partial<MihomoConfig>) => {
@@ -662,7 +984,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (cleanPatch['log-level']) {
       cleanPatch['log-level'] = resolveEffectiveLogLevel(cleanPatch['log-level']);
     }
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setConfig((prev) => {
         if (!prev) return prev;
         const next = { ...prev, ...cleanPatch };
@@ -673,11 +1002,24 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
       return;
     }
-    await apiClientRef.current.updateConfigs(cleanPatch);
-    const updated = await apiClientRef.current.getConfigs();
-    const effectiveLogLevel = resolveEffectiveLogLevel(updated?.['log-level']);
-    setConfig({ ...updated, 'log-level': effectiveLogLevel });
-  }, [demoMode]);
+    try {
+      await client.updateConfigs(cleanPatch);
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      const updated = await client.getConfigs();
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      const effectiveLogLevel = resolveEffectiveLogLevel(updated?.['log-level']);
+      setConfig({ ...updated, 'log-level': effectiveLogLevel });
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
+  }, [isCurrentActionValid]);
 
   const setLogLevel = useCallback(async (lvl: LogLevel): Promise<void> => {
     const targetLevel = resolveEffectiveLogLevel(lvl);
@@ -691,21 +1033,55 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [logLevel, demoMode, status, updateConfigField]);
 
   const closeConnection = async (id: string) => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setConnections((prev) => prev.filter((c) => c.id !== id));
       return;
     }
-    await apiClientRef.current.closeConnection(id);
-    setConnections((prev) => prev.filter((c) => c.id !== id));
+    try {
+      await client.closeConnection(id);
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      setConnections((prev) => prev.filter((c) => c.id !== id));
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
   };
 
   const closeAllConnections = async () => {
-    if (demoMode) {
+    const actionGen = connectGenRef.current;
+    const client = apiClientRef.current;
+    const isDemo = demoModeRef.current;
+
+    if (isDemo) {
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
       setConnections([]);
       return;
     }
-    await apiClientRef.current.closeAllConnections();
-    setConnections([]);
+    try {
+      await client.closeAllConnections();
+      if (!isCurrentActionValid(actionGen, client, isDemo)) {
+        throw new ActionCancelledError();
+      }
+      setConnections([]);
+    } catch (err: unknown) {
+      if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
+        throw isActionCancelledError(err) ? err : new ActionCancelledError();
+      }
+      throw err;
+    }
   };
 
   const clearLogs = () => {
@@ -717,9 +1093,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <ControllerContext.Provider
       value={{
         baseUrl,
-        setBaseUrl,
         secret,
-        setSecret,
         hasConfiguredController,
         hideGlobal,
         setHideGlobal,
@@ -752,6 +1126,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         switchProxy,
         unfixProxy,
         testProxyDelay,
+        testProxyDelayBatch,
         updateConfigMode,
         updateConfigField,
         closeConnection,

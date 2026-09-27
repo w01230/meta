@@ -3,6 +3,7 @@ import { ProxyItem } from '../types/api';
 import { getLatencyInfo } from '../utils/format';
 import {
   sortProxyGroups,
+  sortProxyNodesByDelay,
   filterProxyGroups,
   matchRegionFlag,
   matchRegionCode,
@@ -205,6 +206,38 @@ describe('Proxy and Connection utilities', () => {
       // Deterministically resolves the cycle without infinite loops;
       // breaks cycle at A, then emits C (child A fulfilled), then B (child C fulfilled).
       expect(sorted.map((g) => g.name)).toEqual(['A', 'C', 'B']);
+    });
+  });
+
+  describe('sortProxyNodesByDelay', () => {
+    it('puts positive finite delays first and treats zero, invalid, and missing delays as last', () => {
+      const nodes = ['timeout', 'fast', 'negative', 'missing', 'slow', 'infinite', 'nan'];
+      const proxies: Record<string, ProxyItem> = {
+        timeout: { name: 'timeout', type: 'Node', history: [{ time: '', delay: 0 }] },
+        fast: { name: 'fast', type: 'Node', history: [{ time: '', delay: 12 }] },
+        negative: { name: 'negative', type: 'Node', history: [{ time: '', delay: -1 }] },
+        slow: { name: 'slow', type: 'Node', history: [{ time: '', delay: 90 }] },
+        infinite: { name: 'infinite', type: 'Node', history: [{ time: '', delay: Infinity }] },
+        nan: { name: 'nan', type: 'Node', history: [{ time: '', delay: NaN }] }
+      };
+
+      expect(sortProxyNodesByDelay(nodes, proxies)).toEqual([
+        'fast', 'slow', 'timeout', 'negative', 'missing', 'infinite', 'nan'
+      ]);
+    });
+
+    it('preserves input order for equal delays and among invalid results', () => {
+      const nodes = ['equal-a', 'timeout-a', 'equal-b', 'timeout-b'];
+      const proxies: Record<string, ProxyItem> = {
+        'equal-a': { name: 'equal-a', type: 'Node', history: [{ time: '', delay: 50 }] },
+        'equal-b': { name: 'equal-b', type: 'Node', history: [{ time: '', delay: 50 }] },
+        'timeout-a': { name: 'timeout-a', type: 'Node', history: [{ time: '', delay: 0 }] },
+        'timeout-b': { name: 'timeout-b', type: 'Node', history: [{ time: '', delay: undefined as any }] }
+      };
+
+      expect(sortProxyNodesByDelay(nodes, proxies)).toEqual([
+        'equal-a', 'equal-b', 'timeout-a', 'timeout-b'
+      ]);
     });
   });
 
@@ -676,5 +709,3 @@ describe('Proxy and Connection utilities', () => {
     });
   });
 });
-
-

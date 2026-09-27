@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useController } from '../../context/ControllerContext';
+import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { useToast } from './Toast';
 import { RefreshCw, Settings, Activity } from 'lucide-react';
 import { RunMode } from '../../types/api';
@@ -63,8 +63,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     try {
       await refreshAll();
       showToast('数据已刷新', 'info');
-    } catch {
-      showToast('刷新失败', 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast('刷新失败', 'error');
+      }
     } finally {
       setTimeout(() => setIsRefreshing(false), 500);
     }
@@ -76,7 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       const modeNames = { rule: '规则模式', global: '全局模式', direct: '直连模式' };
       showToast(`已切换至 ${modeNames[mode]}`, 'success');
     } catch (err: unknown) {
-      showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
+      }
     }
   };
 

@@ -18,15 +18,11 @@ export class ApiError extends Error {
 }
 
 export class MihomoApiClient {
+  private static readonly REQUEST_TIMEOUT_MS = 15_000;
   private baseUrl: string;
   private secret: string;
 
   constructor(baseUrl: string, secret = '') {
-    this.baseUrl = baseUrl;
-    this.secret = secret.trim();
-  }
-
-  public updateConfig(baseUrl: string, secret = '') {
     this.baseUrl = baseUrl;
     this.secret = secret.trim();
   }
@@ -47,44 +43,66 @@ export class MihomoApiClient {
   private async request<T>(path: string, options: RequestInit = {}, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
     const url = buildHttpUrl(this.baseUrl, path, params);
     const headers = { ...this.getHeaders(), ...(options.headers as Record<string, string> || {}) };
+    const controller = new AbortController();
+    const callerSignal = options.signal;
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const abortFromCaller = () => controller.abort(callerSignal?.reason);
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          reject(new ApiError(`请求超时（${MihomoApiClient.REQUEST_TIMEOUT_MS / 1000} 秒）`));
+        }, MihomoApiClient.REQUEST_TIMEOUT_MS);
       });
+      callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+      if (callerSignal?.aborted) abortFromCaller();
 
-      if (!response.ok) {
-        let errorDetail = `HTTP ${response.status} ${response.statusText}`;
-        try {
-          const body = await response.json();
-          if (body && typeof body === 'object') {
-            if (typeof body.message === 'string' && body.message) {
-              errorDetail = body.message;
-            } else if (typeof body.error === 'string' && body.error) {
-              errorDetail = body.error;
+      const request = (async () => {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          headers
+        });
+
+        if (!response.ok) {
+          let errorDetail = `HTTP ${response.status} ${response.statusText}`;
+          try {
+            const body = await response.json();
+            if (body && typeof body === 'object') {
+              if (typeof body.message === 'string' && body.message) {
+                errorDetail = body.message;
+              } else if (typeof body.error === 'string' && body.error) {
+                errorDetail = body.error;
+              }
             }
+          } catch {
+            // Response body is not json, ignore
           }
-        } catch {
-          // Response body is not json, ignore
+
+          if (response.status === 401 || response.status === 403) {
+            throw new ApiError('身份验证失败：密钥错误或未提供', response.status);
+          }
+          if (response.status === 404) {
+            throw new ApiError(`资源未找到 (404): ${path}`, response.status);
+          }
+
+          throw new ApiError(`请求失败: ${errorDetail}`, response.status);
         }
 
-        if (response.status === 401 || response.status === 403) {
-          throw new ApiError('身份验证失败：密钥错误或未提供', response.status);
-        }
-        if (response.status === 404) {
-          throw new ApiError(`资源未找到 (404): ${path}`, response.status);
+        if (response.status === 204) {
+          return undefined as unknown as T;
         }
 
-        throw new ApiError(`请求失败: ${errorDetail}`, response.status);
-      }
-
-      if (response.status === 204) {
-        return undefined as unknown as T;
-      }
-
-      return (await response.json()) as T;
+        return (await response.json()) as T;
+      })();
+      return await Promise.race([request, timeout]);
     } catch (err: unknown) {
+      if (timedOut) {
+        throw new ApiError(`请求超时（${MihomoApiClient.REQUEST_TIMEOUT_MS / 1000} 秒）`);
+      }
       if (err instanceof ApiError) {
         throw err;
       }
@@ -96,6 +114,9 @@ export class MihomoApiClient {
         );
       }
       throw new ApiError(msg);
+    } finally {
+      clearTimeout(timeoutId!);
+      callerSignal?.removeEventListener('abort', abortFromCaller);
     }
   }
 

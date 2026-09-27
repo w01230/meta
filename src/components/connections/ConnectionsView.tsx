@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useController } from '../../context/ControllerContext';
+import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { formatBytes, formatDuration } from '../../utils/format';
 import { 
   Search, 
@@ -77,8 +77,10 @@ export const ConnectionsView: React.FC = () => {
     try {
       await closeConnection(id);
       showToast(`已断开连接: ${host}`, 'info');
-    } catch {
-      showToast('断开连接失败', 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast('断开连接失败', 'error');
+      }
     }
   };
 
@@ -86,8 +88,10 @@ export const ConnectionsView: React.FC = () => {
     try {
       await closeAllConnections();
       showToast('已断开所有活动连接', 'success');
-    } catch {
-      showToast('关闭连接失败', 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast('关闭连接失败', 'error');
+      }
     }
   };
 
@@ -223,7 +227,7 @@ export const ConnectionsView: React.FC = () => {
                   const host = conn.metadata.host || conn.metadata.destinationIP;
                   const port = conn.metadata.destinationPort;
                   const process = conn.metadata.process || '未知进程';
-                  const chainText = (conn.chains || []).join(' → ') || 'DIRECT';
+                  const chainText = [...(conn.chains || [])].reverse().join(' → ') || 'DIRECT';
 
                   return (
                     <tr
@@ -383,10 +387,16 @@ export const ConnectionsView: React.FC = () => {
           <div className="modal-footer-action">
             <button
               className="pill-btn danger"
-              onClick={() => {
-                closeConnection(selectedConn.id);
-                setSelectedConn(null);
-                showToast('已断开连接', 'info');
+              onClick={async () => {
+                try {
+                  await closeConnection(selectedConn.id);
+                  setSelectedConn(null);
+                  showToast('已断开连接', 'info');
+                } catch (err: unknown) {
+                  if (!isActionCancelledError(err)) {
+                    showToast('断开连接失败', 'error');
+                  }
+                }
               }}
             >
               断开此连接

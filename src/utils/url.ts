@@ -71,11 +71,12 @@ export function buildWsUrl(
 /**
  * Check if the browser environment might block requests due to HTTPS -> HTTP Mixed Content
  */
-export function checkMixedContentRisk(targetBaseUrl: string): { hasRisk: boolean; message?: string } {
+export function checkMixedContentRisk(targetBaseUrl: string | null | undefined): { hasRisk: boolean; message?: string } {
   if (typeof window === 'undefined') return { hasRisk: false };
+  if (typeof targetBaseUrl !== 'string' || !targetBaseUrl.trim()) return { hasRisk: false };
 
   const isPageHttps = window.location.protocol === 'https:';
-  const isTargetHttp = targetBaseUrl.toLowerCase().startsWith('http://');
+  const isTargetHttp = normalizeBaseUrl(targetBaseUrl).toLowerCase().startsWith('http://');
 
   if (isPageHttps && isTargetHttp) {
     return {

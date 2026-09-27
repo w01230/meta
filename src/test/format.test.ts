@@ -16,6 +16,13 @@ describe('formatBytes', () => {
     expect(formatBytes(1048576)).toBe('1 MB');
     expect(formatBytes(1073741824)).toBe('1 GB');
   });
+
+  it('handles non-finite values and invalid decimal precision', () => {
+    expect(formatBytes(Infinity)).toBe('0 B');
+    expect(formatBytes(NaN)).toBe('0 B');
+    expect(formatBytes(1536, Infinity)).toBe('1.5 KB');
+    expect(formatBytes(1536, 1.5)).toBe('1.5 KB');
+  });
 });
 
 describe('formatSpeed', () => {
@@ -33,6 +40,14 @@ describe('formatDuration', () => {
     expect(formatDuration(now - 125000)).toBe('2m 5s');
     expect(formatDuration(now - 7200000)).toBe('2h 0m');
   });
+
+  it('returns a placeholder for missing or invalid runtime timestamps', () => {
+    expect(formatDuration(null)).toBe('—');
+    expect(formatDuration(undefined)).toBe('—');
+    expect(formatDuration('not a timestamp')).toBe('—');
+    expect(formatDuration(Infinity)).toBe('—');
+    expect(formatDuration({} as any)).toBe('—');
+  });
 });
 
 describe('getLatencyInfo', () => {
@@ -42,6 +57,13 @@ describe('getLatencyInfo', () => {
     expect(getLatencyInfo(80).level).toBe('fast');
     expect(getLatencyInfo(220).level).toBe('medium');
     expect(getLatencyInfo(600).level).toBe('slow');
+  });
+
+  it('treats malformed and non-finite latency values as untested', () => {
+    expect(getLatencyInfo(NaN).level).toBe('untested');
+    expect(getLatencyInfo(Infinity).level).toBe('untested');
+    expect(getLatencyInfo(-Infinity).level).toBe('untested');
+    expect(getLatencyInfo('bad' as any).level).toBe('untested');
   });
 });
 

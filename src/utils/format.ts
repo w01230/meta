@@ -2,13 +2,13 @@
  * Format raw byte values into human readable units (B, KB, MB, GB, TB)
  */
 export function formatBytes(bytes: number | null | undefined, decimals = 1): string {
-  if (bytes === null || bytes === undefined || isNaN(bytes) || bytes < 0) {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
     return '0 B';
   }
   if (bytes === 0) return '0 B';
 
   const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
+  const dm = Number.isFinite(decimals) ? Math.min(100, Math.max(0, Math.trunc(decimals))) : 1;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -30,14 +30,18 @@ export function formatSpeed(bytesPerSec: number | null | undefined): string {
 /**
  * Format connection duration relative to start time
  */
-export function formatDuration(startTime: string | number | Date): string {
-  const startMs = typeof startTime === 'string' 
-    ? new Date(startTime).getTime() 
-    : typeof startTime === 'number' 
-      ? startTime 
-      : startTime.getTime();
+export function formatDuration(startTime: string | number | Date | null | undefined): string {
+  if (startTime === null || startTime === undefined) return '—';
 
-  if (isNaN(startMs)) return '—';
+  const startMs = typeof startTime === 'string'
+    ? new Date(startTime).getTime()
+    : typeof startTime === 'number'
+      ? startTime
+      : startTime instanceof Date
+        ? startTime.getTime()
+        : NaN;
+
+  if (!Number.isFinite(startMs)) return '—';
 
   const now = Date.now();
   const diffSec = Math.max(0, Math.floor((now - startMs) / 1000));
@@ -55,16 +59,6 @@ export function formatDuration(startTime: string | number | Date): string {
   return `${diffHours}h ${remainingMin}m`;
 }
 
-/**
- * Format timestamp to HH:mm:ss
- */
-export function formatTime(timestamp?: string | number | Date): string {
-  if (!timestamp) return '—';
-  const d = typeof timestamp === 'string' || typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
-  if (isNaN(d.getTime())) return '—';
-  return d.toTimeString().split(' ')[0];
-}
-
 export type LatencyLevel = 'fast' | 'medium' | 'slow' | 'timeout' | 'untested';
 
 export interface LatencyInfo {
@@ -77,7 +71,7 @@ export interface LatencyInfo {
  * Categorize latency in milliseconds for color badges
  */
 export function getLatencyInfo(delay?: number): LatencyInfo {
-  if (delay === undefined || delay === null) {
+  if (delay === undefined || delay === null || !Number.isFinite(delay)) {
     return { level: 'untested', text: '未测速', className: 'latency-untested' };
   }
   if (delay <= 0) {

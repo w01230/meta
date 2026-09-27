@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useController } from '../../context/ControllerContext';
+import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { formatBytes, getLatencyInfo } from '../../utils/format';
 import { sortProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
@@ -98,16 +98,26 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const canShowConnectionStats = isConnected || demoMode;
   const rankingCards = useMemo(() => {
     const outboundFor = (connection: ConnectionItem) => {
-      // Built-in demo fixtures store chains group-first; Mihomo's live payload is leaf-first.
       const chain = connection.chains || [];
-      return chain[demoMode ? chain.length - 1 : 0] || '未知出站';
+      return (Array.isArray(chain) && typeof chain[0] === 'string' && chain[0]) || '未知出站';
     };
+    const metadataFor = (connection: ConnectionItem): ConnectionItem['metadata'] =>
+      connection.metadata && typeof connection.metadata === 'object'
+        ? connection.metadata
+        : {} as ConnectionItem['metadata'];
     return [
-      { id: 'domains', title: '活跃域名', Icon: Globe, getKey: (connection: ConnectionItem) => connection.metadata.host || connection.metadata.destinationIP || '未知目标' },
+      { id: 'domains', title: '活跃域名', Icon: Globe, getKey: (connection: ConnectionItem) => {
+        const metadata = metadataFor(connection);
+        return (typeof metadata.host === 'string' && metadata.host) ||
+          (typeof metadata.destinationIP === 'string' && metadata.destinationIP) || '未知目标';
+      } },
       { id: 'outbounds', title: '活跃出站', Icon: Server, getKey: outboundFor },
-      { id: 'sources', title: '活跃来源', Icon: Monitor, getKey: (connection: ConnectionItem) => connection.metadata.sourceIP || '未知来源' },
+      { id: 'sources', title: '活跃来源', Icon: Monitor, getKey: (connection: ConnectionItem) => {
+        const sourceIP = metadataFor(connection).sourceIP;
+        return (typeof sourceIP === 'string' && sourceIP) || '未知来源';
+      } },
     ].map((card) => ({ ...card, rows: rankConnections(canShowConnectionStats ? activeConnections : [], card.getKey) }));
-  }, [activeConnections, demoMode, canShowConnectionStats]);
+  }, [activeConnections, canShowConnectionStats]);
 
   const modeDisplayMap: Record<RunMode, { short: string; long: string }> = {
     rule: { short: '规则模式', long: '规则分流 (Rule)' },
@@ -143,8 +153,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       } else {
         showToast('重新连接失败：无法访问外部控制器', 'error');
       }
-    } catch {
-      showToast('重新连接失败', 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast('重新连接失败', 'error');
+      }
     } finally {
       setTimeout(() => setIsReconnecting(false), 600);
     }
@@ -158,7 +170,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       await updateConfigMode(nextMode);
       showToast(`已切换至: ${modeDisplayMap[nextMode].long.split(' (')[0]}`, 'success');
     } catch (err: unknown) {
-      showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
+      }
     }
   };
 
@@ -170,8 +184,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     try {
       const delay = await testProxyDelay(nodeName);
       showToast(`${nodeName} 测速完成: ${delay}ms`, 'info');
-    } catch {
-      showToast(`${nodeName} 测速超时`, 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast(`${nodeName} 测速超时`, 'error');
+      }
     } finally {
       setTestingNodes((prev) => ({ ...prev, [nodeName]: false }));
     }
@@ -184,7 +200,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       showToast(`已将 [${groupName}] 切换至: ${targetNode}`, 'success');
       setSelectedGroupForSwitch(null);
     } catch (err: unknown) {
-      showToast(`切换失败: ${(err as Error)?.message}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`切换失败: ${(err as Error)?.message}`, 'error');
+      }
     }
   };
 
@@ -193,8 +211,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     try {
       await closeAllConnections();
       showToast('已关闭所有活动连接', 'info');
-    } catch {
-      showToast('关闭全部连接失败', 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast('关闭全部连接失败', 'error');
+      }
     } finally {
       setShowCloseAllConfirm(false);
     }

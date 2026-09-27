@@ -410,6 +410,24 @@ export function sortProxyGroups(groups: ProxyItem[]): ProxyItem[] {
   return [...sortedReferenced, ...unreferencedGroups];
 }
 
+/** Sorts nodes by successful positive delay, keeping timed-out/invalid results last and ties stable. */
+export function sortProxyNodesByDelay(
+  nodes: string[],
+  proxies: Record<string, ProxyItem>
+): string[] {
+  return nodes
+    .map((name, index) => ({ name, index, delay: proxies[name]?.history?.[0]?.delay }))
+    .sort((a, b) => {
+      const aValid = typeof a.delay === 'number' && Number.isFinite(a.delay) && a.delay > 0;
+      const bValid = typeof b.delay === 'number' && Number.isFinite(b.delay) && b.delay > 0;
+      if (aValid && bValid) return a.delay! - b.delay! || a.index - b.index;
+      if (aValid) return -1;
+      if (bValid) return 1;
+      return a.index - b.index;
+    })
+    .map(({ name }) => name);
+}
+
 export interface FilterProxyGroupsOptions {
   hideGlobal?: boolean;
   search?: string;

@@ -154,7 +154,7 @@ export function createInitialDemoConnections(): ConnectionItem[] {
       upload: 4851200,
       download: 142857000,
       start: new Date(now - 145000).toISOString(),
-      chains: ['国外媒体', '🇭🇰 香港 01 [IEPL 专线]'],
+      chains: ['🇭🇰 香港 01 [IEPL 专线]', '国外媒体'],
       rule: 'DOMAIN-SUFFIX',
       rulePayload: 'googlevideo.com'
     },
@@ -176,7 +176,7 @@ export function createInitialDemoConnections(): ConnectionItem[] {
       upload: 254000,
       download: 1845000,
       start: new Date(now - 28000).toISOString(),
-      chains: ['节点选择', '🇭🇰 香港 01 [IEPL 专线]'],
+      chains: ['🇭🇰 香港 01 [IEPL 专线]', '节点选择'],
       rule: 'DOMAIN-KEYWORD',
       rulePayload: 'github'
     },
@@ -198,7 +198,7 @@ export function createInitialDemoConnections(): ConnectionItem[] {
       upload: 1250000,
       download: 6420000,
       start: new Date(now - 600000).toISOString(),
-      chains: ['节点选择', '🇭🇰 香港 01 [IEPL 专线]'],
+      chains: ['🇭🇰 香港 01 [IEPL 专线]', '节点选择'],
       rule: 'IP-CIDR',
       rulePayload: '91.108.4.0/22'
     },
@@ -219,7 +219,7 @@ export function createInitialDemoConnections(): ConnectionItem[] {
       upload: 82000,
       download: 512000,
       start: new Date(now - 8000).toISOString(),
-      chains: ['国内直连', 'DIRECT'],
+      chains: ['DIRECT', '国内直连'],
       rule: 'DOMAIN-SUFFIX',
       rulePayload: 'bilibili.com'
     },
@@ -240,7 +240,7 @@ export function createInitialDemoConnections(): ConnectionItem[] {
       upload: 432000,
       download: 3120000,
       start: new Date(now - 45000).toISOString(),
-      chains: ['节点选择', '🇭🇰 香港 01 [IEPL 专线]'],
+      chains: ['🇭🇰 香港 01 [IEPL 专线]', '节点选择'],
       rule: 'DOMAIN-SUFFIX',
       rulePayload: 'openai.com'
     }

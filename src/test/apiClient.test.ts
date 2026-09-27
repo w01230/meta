@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MihomoApiClient, ApiError } from '../services/apiClient';
 
 describe('MihomoApiClient', () => {
@@ -9,6 +9,65 @@ describe('MihomoApiClient', () => {
   beforeEach(() => {
     client = new MihomoApiClient(baseUrl, secret);
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe('request timeout', () => {
+    it('times out a fetch that never resolves and aborts its signal', async () => {
+      vi.useFakeTimers();
+      let signal: AbortSignal | undefined;
+      globalThis.fetch = vi.fn((_url, options) => {
+        signal = options?.signal as AbortSignal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        });
+      }) as unknown as typeof fetch;
+
+      const request = client.getVersion();
+      const expectation = expect(request).rejects.toThrow(/请求超时/);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expectation;
+
+      expect(signal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('times out while reading a response body even if json ignores abort', async () => {
+      vi.useFakeTimers();
+      let signal: AbortSignal | undefined;
+      globalThis.fetch = vi.fn((_url, options) => {
+        signal = options?.signal as AbortSignal;
+        return Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}) });
+      }) as unknown as typeof fetch;
+
+      const request = client.getVersion();
+      const expectation = expect(request).rejects.toThrow(/请求超时/);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expectation;
+
+      expect(signal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cleans up the timer after success and HTTP errors', async () => {
+      vi.useFakeTimers();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ version: 'v1' }) })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          json: () => Promise.resolve({ message: 'server error' })
+        });
+
+      await expect(client.getVersion()).resolves.toEqual({ version: 'v1' });
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(client.getVersion()).rejects.toThrow('server error');
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   it('includes Authorization Bearer header when secret is provided', async () => {

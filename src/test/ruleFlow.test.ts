@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ConnectionItem } from '../types/api';
 import { buildRuleFlow, selectMostFrequentRecentRoute } from '../utils/ruleFlow';
+import { createInitialDemoConnections } from '../services/demoData';
 
 const connection = (overrides: Partial<ConnectionItem> = {}): ConnectionItem => ({
   id: 'c1',
@@ -18,6 +19,17 @@ const connection = (overrides: Partial<ConnectionItem> = {}): ConnectionItem => 
 });
 
 describe('buildRuleFlow', () => {
+  it('builds demo routes from exit-first fixtures without mutating their chains', () => {
+    const connections = createInitialDemoConnections();
+    const originalChains = connections.map(({ chains }) => [...chains]);
+    const flow = buildRuleFlow(connections);
+
+    const group = flow.nodes.find((node) => node.label === '国外媒体');
+    const exit = flow.nodes.find((node) => node.label === '🇭🇰 香港 01 [IEPL 专线]');
+    expect(flow.edges).toContainEqual(expect.objectContaining({ source: group?.id, target: exit?.id }));
+    expect(connections.map(({ chains }) => chains)).toEqual(originalChains);
+  });
+
   it('aggregates shared paths and emits rule-to-exit direction', () => {
     const flow = buildRuleFlow([
       connection({ id: 'a' }),

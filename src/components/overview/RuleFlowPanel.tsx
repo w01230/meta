@@ -53,14 +53,19 @@ function FlowCanvas({ connections, isConnected, demoMode }: { connections: Conne
   const { fitView, setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
-  const [compactViewport, setCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
+  const [compactViewport, setCompactViewport] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     const query = window.matchMedia('(max-width: 640px)');
     const update = () => setCompactViewport(query.matches);
     update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', update);
+      return () => query.removeEventListener('change', update);
+    }
+    query.addListener(update);
+    return () => query.removeListener(update);
   }, []);
 
   const rows: Record<number, number> = {};

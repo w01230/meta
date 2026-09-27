@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { useController } from '../../context/ControllerContext';
+import React, { useMemo, useState } from 'react';
+import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { getLatencyInfo } from '../../utils/format';
 import { Search, Zap, X, Shield, ArrowUpDown, Navigation, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { RunMode, ProxyItem } from '../../types/api';
-import { sortProxyGroups, filterProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
+import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import {
   getStoredProxiesIsCompact,
@@ -22,6 +22,7 @@ export const ProxiesView: React.FC = () => {
     switchProxy,
     unfixProxy,
     testProxyDelay,
+    testProxyDelayBatch,
     status
   } = useController();
 
@@ -67,12 +68,13 @@ export const ProxiesView: React.FC = () => {
   const isConnected = status === 'connected';
 
   // 1. Get all proxy groups
-  const allGroups = Object.values(proxies).filter(
-    (p) => p.all && p.all.length > 0
+  const allGroups = useMemo(
+    () => Object.values(proxies).filter((p) => p.all && p.all.length > 0),
+    [proxies]
   );
 
   // 2. Sort groups (referenced child groups appear before unreferenced groups; stable within partitions)
-  const sortedGroups = sortProxyGroups(allGroups);
+  const sortedGroups = useMemo(() => sortProxyGroups(allGroups), [allGroups]);
 
   // 3. Filter groups (hide GLOBAL if configured, filter by search term)
   const filteredGroups = filterProxyGroups(sortedGroups, {
@@ -86,7 +88,9 @@ export const ProxiesView: React.FC = () => {
       const modeNames: Record<RunMode, string> = { rule: '规则模式', global: '全局模式', direct: '直连模式' };
       showToast(`已切换至 ${modeNames[mode]}`, 'success');
     } catch (err: unknown) {
-      showToast(`切换模式失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`切换模式失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      }
     }
   };
 
@@ -95,7 +99,9 @@ export const ProxiesView: React.FC = () => {
       await switchProxy(groupName, nodeName);
       showToast(`已将 [${groupName}] 切换为: ${nodeName}`, 'success');
     } catch (err: unknown) {
-      showToast(`切换失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`切换失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      }
     }
   };
 
@@ -105,7 +111,9 @@ export const ProxiesView: React.FC = () => {
       await unfixProxy(groupName);
       showToast(`已恢复 [${groupName}] 自动选择`, 'success');
     } catch (err: unknown) {
-      showToast(`恢复自动选择失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      if (!isActionCancelledError(err)) {
+        showToast(`恢复自动选择失败: ${(err as Error)?.message || '请求失败'}`, 'error');
+      }
     } finally {
       setIsUnfixingGroup((prev) => ({ ...prev, [groupName]: false }));
     }
@@ -117,8 +125,10 @@ export const ProxiesView: React.FC = () => {
     try {
       const delay = await testProxyDelay(nodeName);
       showToast(`${nodeName} 测速完成: ${delay}ms`, 'info');
-    } catch {
-      showToast(`${nodeName} 测速失败/超时`, 'error');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast(`${nodeName} 测速失败/超时`, 'error');
+      }
     } finally {
       setTestingNodes((prev) => ({ ...prev, [nodeName]: false }));
     }
@@ -129,17 +139,16 @@ export const ProxiesView: React.FC = () => {
     setIsGroupTesting((prev) => ({ ...prev, [group.name]: true }));
     showToast(`正在批量测速 [${group.name}] 中的节点...`, 'info');
 
-    // Run tests in batches
-    for (const nodeName of group.all) {
-      try {
-        await testProxyDelay(nodeName);
-      } catch {
-        // ignore individual failure in batch
+    try {
+      await testProxyDelayBatch(group.all);
+      showToast(`[${group.name}] 批量测速已完成`, 'success');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast(`[${group.name}] 批量测速失败`, 'error');
       }
+    } finally {
+      setIsGroupTesting((prev) => ({ ...prev, [group.name]: false }));
     }
-
-    setIsGroupTesting((prev) => ({ ...prev, [group.name]: false }));
-    showToast(`[${group.name}] 批量测速已完成`, 'success');
   };
 
   const sortNodes = (nodes: string[]) => {
@@ -150,11 +159,7 @@ export const ProxiesView: React.FC = () => {
       return copy.sort((a, b) => a.localeCompare(b));
     }
     if (sortBy === 'delay') {
-      return copy.sort((a, b) => {
-        const delayA = proxies[a]?.history?.[0]?.delay ?? 99999;
-        const delayB = proxies[b]?.history?.[0]?.delay ?? 99999;
-        return delayA - delayB;
-      });
+      return sortProxyNodesByDelay(copy, proxies);
     }
     return copy;
   };
@@ -417,52 +422,43 @@ export const ProxiesView: React.FC = () => {
                         <div
                           key={nodeName}
                           className={`node-grid-item ${isSelected ? 'active-selected' : ''} ${!isSelectableGroup ? 'readonly-node' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isSelectableGroup) handleSwitch(group.name, nodeName);
-                          }}
-                          onKeyDown={(e) => {
-                            if (!isSelectableGroup || (e.key !== 'Enter' && e.key !== ' ')) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleSwitch(group.name, nodeName);
-                          }}
-                          role={isSelectableGroup ? 'button' : undefined}
-                          tabIndex={isSelectableGroup ? 0 : undefined}
-                          aria-disabled={!isSelectableGroup}
-                          aria-pressed={isSelectableGroup ? isSelected : undefined}
-                          data-tooltip={cardTooltip}
                         >
-                          <div className="node-item-top">
-                            <div className="node-title-wrap">
-                              <CircularFlag name={nodeName} size={16} className="node-flag-icon" />
-                              <span className="node-title" data-tooltip={nodeName} aria-label={nodeName}>
-                                {sanitizeDisplayName(nodeName)}
-                              </span>
+                          <button
+                            type="button"
+                            className="node-card-select"
+                            onClick={() => handleSwitch(group.name, nodeName)}
+                            disabled={!isSelectableGroup}
+                            aria-pressed={isSelected}
+                            data-tooltip={cardTooltip}
+                          >
+                            <div className="node-item-top">
+                              <div className="node-title-wrap">
+                                <CircularFlag name={nodeName} size={16} className="node-flag-icon" />
+                                <span className="node-title" data-tooltip={nodeName} aria-label={nodeName}>
+                                  {sanitizeDisplayName(nodeName)}
+                                </span>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="node-item-bottom">
-                            <span className="node-proto-tag">
-                              {node?.type || 'Node'}
-                            </span>
+                            <div className="node-item-bottom">
+                              <span className="node-proto-tag">
+                                {node?.type || 'Node'}
+                              </span>
 
-                            <div className="node-right-action">
                               <span className={`node-latency-tag ${latency.className}`}>
                                 {latency.text}
                               </span>
-
-                              <button
-                                type="button"
-                                className="btn-circle-action size-xs node-mini-zap"
-                                onClick={(e) => handleSingleTest(e, nodeName)}
-                                data-tooltip={isTesting ? '正在测速...' : `测速 ${nodeName}`}
-                                aria-label={isTesting ? '正在测速' : `测速 ${nodeName}`}
-                              >
-                                <Zap size={10} className={isTesting ? 'spin-animation' : ''} />
-                              </button>
                             </div>
-                          </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-circle-action size-xs node-mini-zap"
+                            onClick={(e) => handleSingleTest(e, nodeName)}
+                            data-tooltip={isTesting ? '正在测速...' : `测速 ${nodeName}`}
+                            aria-label={isTesting ? '正在测速' : `测速 ${nodeName}`}
+                          >
+                            <Zap size={10} className={isTesting ? 'spin-animation' : ''} />
+                          </button>
                         </div>
                       );
                     })}

@@ -11,6 +11,15 @@ export const RulesView: React.FC = () => {
 
   // Extract distinct rule types
   const ruleTypes = Array.from(new Set(rules.map((r) => r.type)));
+  const visibleRuleTypes = ruleTypes.slice(0, 6);
+  const hasVisibleMatch = visibleRuleTypes.some((type) => type.toUpperCase() === 'MATCH');
+
+  const rulesTotalBadge = (
+    <span className="rules-total-count" role="img" aria-label={`规则总数：${rules.length}`} title={`规则总数：${rules.length}`}>
+      <span className="rules-total-count-label" aria-hidden="true">总数</span>
+      <span className="rules-total-count-circle tabular-nums" aria-hidden="true">{rules.length}</span>
+    </span>
+  );
 
   // Filter rules
   const filtered = rules.filter((rule) => {
@@ -32,11 +41,6 @@ export const RulesView: React.FC = () => {
       {/* Top Toolbar */}
       <div className="rules-toolbar meta-card">
         <div className="toolbar-left">
-          <div className="rules-stat-badge">
-            <span className="stat-label">生效规则</span>
-            <span className="stat-val tabular-nums">{rules.length} 条</span>
-          </div>
-
           {/* Type Filter Pills */}
           <div className="rules-type-pills">
             <button
@@ -45,15 +49,18 @@ export const RulesView: React.FC = () => {
             >
               全部类型
             </button>
-            {ruleTypes.slice(0, 6).map((t) => (
-              <button
-                key={t}
-                className={`rule-type-pill ${typeFilter === t ? 'active' : ''}`}
-                onClick={() => setTypeFilter(t)}
-              >
-                {t}
-              </button>
+            {visibleRuleTypes.map((t) => (
+              <React.Fragment key={t}>
+                <button
+                  className={`rule-type-pill ${typeFilter === t ? 'active' : ''}`}
+                  onClick={() => setTypeFilter(t)}
+                >
+                  {t}
+                </button>
+                {t.toUpperCase() === 'MATCH' && rulesTotalBadge}
+              </React.Fragment>
             ))}
+            {!hasVisibleMatch && rulesTotalBadge}
           </div>
         </div>
 
