@@ -78,6 +78,13 @@ interface ControllerContextType {
   logLevel: LogLevel;
   setLogLevel: (lvl: LogLevel) => Promise<void>;
 
+  // Credential Persistence (SettingsModal API)
+  isRemembered: boolean;
+  isCredentialRemembered: (url?: string, secret?: string) => boolean;
+  saveAndConnect: (url: string, secret: string, remember: boolean) => Promise<SaveCredentialResult>;
+  clearPersistedCredential: () => boolean;
+  cancelPendingRemember: () => void;
+
   // Actions
   connectController: (url?: string, secret?: string) => Promise<boolean>;
   refreshAll: () => Promise<void>;
@@ -97,6 +104,8 @@ const ControllerContext = createContext<ControllerContextType | null>(null);
 
 export const STORAGE_KEY_BASE_URL = 'meta_dashboard_base_url';
 export const SESSION_KEY_BOUND_SECRET = 'meta_dashboard_session_bound_secret_v1';
+export const STORAGE_KEY_BOUND_SECRET = 'meta_dashboard_bound_secret_v1';
+export const STORAGE_KEY_REMEMBERED_SECRET = STORAGE_KEY_BOUND_SECRET;
 const MAX_TRAFFIC_CHART_POINTS = 900;
 const MAX_MEMORY_CHART_POINTS = 30;
 const MAX_LOG_COUNT = 300;
@@ -130,6 +139,13 @@ export interface StorageSnapshot {
   baseUrl: string;
   hasConfiguredController: boolean;
   secret: string;
+  isRemembered: boolean;
+}
+
+export interface SaveCredentialResult {
+  connected: boolean;
+  remembered: boolean;
+  persistenceError: boolean;
 }
 
 function safeGetLocalStorage(key: string): string | null {
@@ -176,6 +192,134 @@ function safeSetSessionBoundSecret(url: string, secret: string): void {
   }
 }
 
+export function safeSetPersistentBoundSecret(
+  url: string,
+  secret: string,
+  setStorageItem?: (key: string, value: string) => void
+): boolean {
+  try {
+    const record: BoundSessionRecord = {
+      normalizedUrl: normalizeBaseUrl(url),
+      secret
+    };
+    const serialized = JSON.stringify(record);
+    if (setStorageItem) {
+      setStorageItem(STORAGE_KEY_BOUND_SECRET, serialized);
+    } else {
+      const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null);
+      if (!storage) return false;
+      storage.setItem(STORAGE_KEY_BOUND_SECRET, serialized);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function safeRemovePersistentBoundSecret(
+  removeStorageItem?: (key: string) => void
+): boolean {
+  try {
+    if (removeStorageItem) {
+      removeStorageItem(STORAGE_KEY_BOUND_SECRET);
+    } else {
+      const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null);
+      if (!storage) return false;
+      storage.removeItem(STORAGE_KEY_BOUND_SECRET);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface PersistenceCommitResult {
+  remembered: boolean;
+  persistenceError: boolean;
+}
+
+function safeSetLocalStorageItem(key: string, value: string): void {
+  const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!storage) {
+    throw new Error('localStorage is not available');
+  }
+  storage.setItem(key, value);
+}
+
+/**
+ * Commits credentials to persistent storage during checked save.
+ * Verifies that persisted BASE_URL actually equals the normalized verified controller URL
+ * both before writing the bound secret and after writing it.
+ * If URL cannot persist or mismatches due to storage error/race, it avoids corrupting/overwriting
+ * unrelated credentials and returns persistenceError: true.
+ */
+export function commitCheckedSaveCredentials(
+  url: string,
+  secret: string,
+  getStorageItem: (key: string) => string | null = safeGetLocalStorage,
+  setStorageItem: (key: string, value: string) => void = safeSetLocalStorageItem
+): PersistenceCommitResult {
+  const normalizedTarget = normalizeBaseUrl(url);
+
+  // 1. Attempt to persist BASE_URL
+  try {
+    setStorageItem(STORAGE_KEY_BASE_URL, normalizedTarget);
+  } catch {
+    return { remembered: false, persistenceError: true };
+  }
+
+  // 2. Verify that persisted BASE_URL actually equals normalized verified controller URL
+  try {
+    const persistedUrl = getStorageItem(STORAGE_KEY_BASE_URL);
+    if (!persistedUrl || normalizeBaseUrl(persistedUrl) !== normalizedTarget) {
+      // URL could not persist or mismatches due to storage error/race.
+      // Do not write bound secret to avoid overwriting or corrupting unrelated credentials.
+      return { remembered: false, persistenceError: true };
+    }
+  } catch {
+    return { remembered: false, persistenceError: true };
+  }
+
+  // 3. Write bound persistent secret
+  try {
+    const record: BoundSessionRecord = {
+      normalizedUrl: normalizedTarget,
+      secret
+    };
+    setStorageItem(STORAGE_KEY_BOUND_SECRET, JSON.stringify(record));
+  } catch {
+    return { remembered: false, persistenceError: true };
+  }
+
+  // 4. Final verification: ensure BASE_URL still matches (no cross-tab race during secret write)
+  try {
+    const finalUrl = getStorageItem(STORAGE_KEY_BASE_URL);
+    if (!finalUrl || normalizeBaseUrl(finalUrl) !== normalizedTarget) {
+      return { remembered: false, persistenceError: true };
+    }
+  } catch {
+    return { remembered: false, persistenceError: true };
+  }
+
+  return { remembered: true, persistenceError: false };
+}
+
+export function isStoredSecretRemembered(
+  url: string | null | undefined,
+  secret: string | null | undefined,
+  rawPersistentRecord?: string | null | undefined
+): boolean {
+  if (typeof url !== 'string' || !url.trim() || secret === undefined || secret === null) {
+    return false;
+  }
+  const raw = rawPersistentRecord !== undefined ? rawPersistentRecord : safeGetLocalStorage(STORAGE_KEY_BOUND_SECRET);
+  const record = parseBoundSecretRecord(raw);
+  if (!record) {
+    return false;
+  }
+  return record.normalizedUrl === normalizeBaseUrl(url) && record.secret === secret;
+}
+
 /**
  * Safely parses the raw JSON session record and validates its structure.
  * Returns null if raw is missing, malformed JSON, or missing required string fields.
@@ -207,23 +351,31 @@ export function parseBoundSecretRecord(raw: string | null | undefined): BoundSes
 
 /**
  * Resolves the secret to restore on startup.
+ * Matching session record takes precedence even if secret is empty string, then matching persistent.
  * Only restores secret if the parsed JSON record's normalizedUrl matches the persisted localStorage URL.
  * Never restores legacy plain secret or unbound values.
  */
 export function resolveRestoredSecret(
   persistedUrl: string | null | undefined,
-  rawRecord: string | null | undefined
+  rawSessionRecord: string | null | undefined,
+  rawPersistentRecord?: string | null | undefined
 ): string {
   if (typeof persistedUrl !== 'string' || !persistedUrl.trim()) {
     return '';
   }
-  const record = parseBoundSecretRecord(rawRecord);
-  if (!record) {
-    return '';
+  const normalizedTarget = normalizeBaseUrl(persistedUrl);
+
+  const sessionRecord = parseBoundSecretRecord(rawSessionRecord);
+  if (sessionRecord && sessionRecord.normalizedUrl === normalizedTarget) {
+    // Matching session record takes precedence even if secret is empty string
+    return sessionRecord.secret;
   }
-  if (normalizeBaseUrl(persistedUrl) === record.normalizedUrl) {
-    return record.secret;
+
+  const persistentRecord = parseBoundSecretRecord(rawPersistentRecord);
+  if (persistentRecord && persistentRecord.normalizedUrl === normalizedTarget) {
+    return persistentRecord.secret;
   }
+
   return '';
 }
 
@@ -236,16 +388,25 @@ export function loadInitialControllerSnapshot(
   getSessionStorageItem: (key: string) => string | null = safeGetSessionStorage
 ): StorageSnapshot {
   const persistedUrl = getLocalStorageItem(STORAGE_KEY_BASE_URL);
-  const rawRecord = getSessionStorageItem(SESSION_KEY_BOUND_SECRET);
+  const rawSessionRecord = getSessionStorageItem(SESSION_KEY_BOUND_SECRET);
+  const rawPersistentRecord = getLocalStorageItem(STORAGE_KEY_BOUND_SECRET);
 
   const hasConfiguredController = typeof persistedUrl === 'string' && persistedUrl.trim().length > 0;
   const baseUrl = hasConfiguredController ? persistedUrl : 'http://127.0.0.1:9090';
-  const secret = resolveRestoredSecret(persistedUrl, rawRecord);
+
+  let secret = '';
+  let isRemembered = false;
+
+  if (hasConfiguredController) {
+    secret = resolveRestoredSecret(persistedUrl, rawSessionRecord, rawPersistentRecord);
+    isRemembered = isStoredSecretRemembered(baseUrl, secret, rawPersistentRecord);
+  }
 
   return {
     baseUrl,
     hasConfiguredController,
-    secret
+    secret,
+    isRemembered
   };
 }
 
@@ -367,6 +528,49 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   logLevelRef.current = logLevel;
 
   const connectGenRef = useRef(0);
+  const consentRevisionRef = useRef(0);
+  const [isRemembered, setIsRemembered] = useState<boolean>(() => initialSnapshot.isRemembered);
+
+  // Cross-tab storage change sync for persistent credential state (never mutates active URL or secret)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY_BOUND_SECRET) {
+        setIsRemembered(isStoredSecretRemembered(baseUrl, secret, e.newValue));
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [baseUrl, secret]);
+
+  const isCredentialRemembered = useCallback(
+    (targetUrl?: string, targetSecret?: string): boolean => {
+      const u = targetUrl !== undefined ? targetUrl : baseUrl;
+      const s = targetSecret !== undefined ? targetSecret : secret;
+      return isStoredSecretRemembered(u, s);
+    },
+    [baseUrl, secret]
+  );
+
+  const clearPersistedCredential = useCallback((): boolean => {
+    // Revoke any in-flight checked-save consent to prevent resurrection
+    consentRevisionRef.current++;
+    const success = safeRemovePersistentBoundSecret();
+    if (success) {
+      setIsRemembered(false);
+    }
+    return success;
+  }, []);
+
+  const cancelPendingRemember = useCallback((): void => {
+    // Revoke in-flight checked-save consent on modal dismiss or cancel
+    consentRevisionRef.current++;
+  }, []);
+
   const wsHealthRef = useRef<{ traffic: boolean; connections: boolean }>({ traffic: false, connections: false });
 
   // API Client ref
@@ -442,7 +646,12 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   // Real connection initializer with request generation counter and atomic demo exit
-  const connectController = useCallback(async (targetUrl?: string, targetSecret?: string): Promise<boolean> => {
+  const connectControllerInternal = useCallback(async (
+    targetUrl?: string,
+    targetSecret?: string,
+    remember?: boolean,
+    expectedConsentRev?: number
+  ): Promise<SaveCredentialResult> => {
     const gen = ++connectGenRef.current;
     const url = targetUrl !== undefined ? normalizeBaseUrl(targetUrl) : baseUrl;
     const sec = targetSecret !== undefined ? targetSecret : secret;
@@ -462,7 +671,9 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       // Complete full atomic 5-endpoint REST reachability check
       const handshake = await client.verifyFullRestHandshake();
-      if (gen !== connectGenRef.current) return false;
+      if (gen !== connectGenRef.current) {
+        return { connected: false, remembered: false, persistenceError: false };
+      }
 
       const currentState: TransitionState = {
         isDemo: demoModeRef.current,
@@ -492,6 +703,9 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setUnreadLogCount(0);
       }
 
+      let remembered = false;
+      let persistenceError = false;
+
       // Commit validated credentials to active state and storage
       if (outcome.shouldCommitCredentials) {
         setBaseUrlState(url);
@@ -499,8 +713,25 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         apiClientRef.current = client;
         setHasConfiguredController(true);
 
-        safeSetLocalStorage(STORAGE_KEY_BASE_URL, url);
         safeSetSessionBoundSecret(url, sec);
+
+        if (remember === true) {
+          // Check consent revision guard to prevent resurrection from unchecked/dismissed actions
+          if (expectedConsentRev === undefined || expectedConsentRev === consentRevisionRef.current) {
+            const commitRes = commitCheckedSaveCredentials(url, sec);
+            remembered = commitRes.remembered;
+            persistenceError = commitRes.persistenceError;
+            setIsRemembered(commitRes.remembered);
+          } else {
+            // Consent was revoked while connecting: do not write persistent secret, only update BASE_URL
+            safeSetLocalStorage(STORAGE_KEY_BASE_URL, url);
+            setIsRemembered(isStoredSecretRemembered(url, sec));
+          }
+        } else {
+          safeSetLocalStorage(STORAGE_KEY_BASE_URL, url);
+          // Existing startup/reconnect/demo transitions never write/delete persistent credential.
+          setIsRemembered(isStoredSecretRemembered(url, sec));
+        }
       }
 
       setVersion(handshake.version);
@@ -577,9 +808,15 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       );
 
-      return true;
+      return {
+        connected: true,
+        remembered,
+        persistenceError
+      };
     } catch (err: unknown) {
-      if (gen !== connectGenRef.current) return false;
+      if (gen !== connectGenRef.current) {
+        return { connected: false, remembered: false, persistenceError: false };
+      }
       const msg = (err as Error)?.message || '无法连接到外部控制器';
 
       const currentState: TransitionState = {
@@ -598,9 +835,29 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setStatus(outcome.nextStatus);
         setStatusError(outcome.nextStatusError);
       }
-      return false;
+      return {
+        connected: false,
+        remembered: false,
+        persistenceError: false
+      };
     }
   }, [baseUrl, secret, status, statusError, cleanupWebSockets, stopDemoSimulation, resetMetricsAndData]);
+
+  const connectController = useCallback(
+    async (targetUrl?: string, targetSecret?: string): Promise<boolean> => {
+      const res = await connectControllerInternal(targetUrl, targetSecret, false);
+      return res.connected;
+    },
+    [connectControllerInternal]
+  );
+
+  const saveAndConnect = useCallback(
+    async (targetUrl: string, targetSecret: string, remember: boolean): Promise<SaveCredentialResult> => {
+      const consentRev = ++consentRevisionRef.current;
+      return connectControllerInternal(targetUrl, targetSecret, remember, consentRev);
+    },
+    [connectControllerInternal]
+  );
 
   // Separate effect for live log WS stream so logLevel changes properly reconnect WS
   useEffect(() => {
@@ -1121,6 +1378,11 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         },
         logLevel,
         setLogLevel,
+        isRemembered,
+        isCredentialRemembered,
+        saveAndConnect,
+        clearPersistedCredential,
+        cancelPendingRemember,
         connectController,
         refreshAll,
         switchProxy,

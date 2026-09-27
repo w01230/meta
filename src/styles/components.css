@@ -1604,6 +1604,55 @@
   color: var(--text-primary);
 }
 
+.remember-secret-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-inner);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.remember-secret-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.remember-secret-label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.remember-secret-help,
+.remember-secret-error {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.remember-secret-help {
+  color: var(--text-secondary);
+}
+
+.remember-secret-error {
+  color: var(--status-red);
+}
+
+.remember-secret-setting .toggle-switch {
+  width: 44px;
+  height: 44px;
+}
+
+.remember-secret-setting .toggle-slider {
+  top: 10px;
+  bottom: 10px;
+}
+
 .input-with-icon {
   position: relative;
   display: flex;

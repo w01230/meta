@@ -3,7 +3,7 @@ import { Modal } from './Modal';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { useToast } from './Toast';
 import { resolveStatusText } from '../../utils/status';
-import { checkMixedContentRisk } from '../../utils/url';
+import { checkMixedContentRisk, normalizeBaseUrl } from '../../utils/url';
 import { extractVersionToken } from '../../utils/format';
 import { LogLevel } from '../../types/api';
 import { ApiError } from '../../services/apiClient';
@@ -53,15 +53,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     status,
     statusError,
     version,
+    isRemembered,
+    saveAndConnect,
+    clearPersistedCredential,
+    cancelPendingRemember,
     logLevel,
     setLogLevel,
-    connectController,
     apiClient
   } = useController();
 
   const { showToast } = useToast();
   const [inputUrl, setInputUrl] = useState(baseUrl);
   const [inputSecret, setInputSecret] = useState(secret);
+  const [rememberCredential, setRememberCredential] = useState(false);
+  const [rememberError, setRememberError] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTogglingDemo, setIsTogglingDemo] = useState(false);
@@ -72,6 +77,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [confirmFlush, setConfirmFlush] = useState<'fakeip' | 'dns' | null>(null);
   const [isFlushingFakeip, setIsFlushingFakeip] = useState(false);
   const [isFlushingDns, setIsFlushingDns] = useState(false);
+  const submitGenerationRef = useRef(0);
 
   const connectionStateRef = useRef({ baseUrl, secret, demoMode, status, apiClient });
   connectionStateRef.current = { baseUrl, secret, demoMode, status, apiClient };
@@ -80,8 +86,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     if (isOpen) {
       setInputUrl(baseUrl);
       setInputSecret(secret);
+      setRememberCredential(isRemembered);
+      setRememberError(null);
       setLocalError(null);
       setConfirmFlush(null);
+      setIsSubmitting(false);
     }
   }, [isOpen, baseUrl, secret]);
 
@@ -91,6 +100,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const mixedContentRisk = checkMixedContentRisk(inputUrl);
   const isRealConnected = !demoMode && status === 'connected';
+
+  const handleDismiss = () => {
+    submitGenerationRef.current++;
+    cancelPendingRemember();
+    onClose();
+  };
+
+  const handleUrlChange = (nextUrl: string) => {
+    setInputUrl(nextUrl);
+    if (normalizeBaseUrl(nextUrl) !== normalizeBaseUrl(baseUrl)) {
+      setInputSecret('');
+      setRememberCredential(false);
+      setRememberError(null);
+    }
+  };
+
+  const handleRememberChange = (checked: boolean) => {
+    setRememberError(null);
+    if (checked) {
+      setRememberCredential(true);
+      return;
+    }
+
+    cancelPendingRemember();
+    if (!clearPersistedCredential()) {
+      setRememberCredential(true);
+      const message = '无法移除已保存的密钥，请检查浏览器存储设置';
+      setRememberError(message);
+      showToast(message, 'error');
+      return;
+    }
+    setRememberCredential(false);
+  };
 
   const handleToggleDemo = async () => {
     if (isTogglingDemo || isSubmitting) return;
@@ -119,31 +161,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleSaveAndConnect = async () => {
     if (isSubmitting || isTogglingDemo) return;
+    const generation = ++submitGenerationRef.current;
     setIsSubmitting(true);
     setLocalError(null);
 
     const wasDemo = demoMode;
     const targetUrl = inputUrl.trim() || 'http://127.0.0.1:9090';
-    const success = await connectController(targetUrl, inputSecret);
-    setIsSubmitting(false);
+    try {
+      const result = await saveAndConnect(targetUrl, inputSecret, rememberCredential);
+      if (generation !== submitGenerationRef.current) return;
+      setIsSubmitting(false);
 
-    if (success) {
-      showToast(
-        wasDemo
-          ? '已退出演示模式，正在连接控制器'
-          : '验证成功，已保存配置；正在连接实时数据',
-        'success'
-      );
-      onClose();
-    } else {
+      if (result.connected) {
+        if (rememberCredential && result.persistenceError) {
+          const message = '已连接，但无法记住密钥';
+          setRememberError(`${message}，请检查浏览器存储设置`);
+          showToast(message, 'error');
+        } else if (result.remembered) {
+          showToast(
+            wasDemo ? '已退出演示模式，并已在此浏览器保存密钥' : '验证成功，密钥已保存在此浏览器',
+            'success'
+          );
+        } else {
+          showToast(wasDemo ? '已退出演示模式，正在连接控制器' : '验证成功，正在连接实时数据', 'success');
+        }
+        handleDismiss();
+      } else {
+        if (wasDemo) {
+          const msg = '退出演示模式失败：无法连接控制器，请检查地址与密钥（已保持演示模式）';
+          setLocalError(msg);
+          showToast(msg, 'error');
+        } else {
+          setLocalError(null);
+          showToast('无法连接控制器，请检查地址、端口与密钥', 'error');
+        }
+      }
+    } catch {
+      if (generation !== submitGenerationRef.current) return;
+      setIsSubmitting(false);
       if (wasDemo) {
         const msg = '退出演示模式失败：无法连接控制器，请检查地址与密钥（已保持演示模式）';
         setLocalError(msg);
         showToast(msg, 'error');
       } else {
-        setLocalError(null);
         showToast('无法连接控制器，请检查地址、端口与密钥', 'error');
       }
+    } finally {
+      if (generation === submitGenerationRef.current) setIsSubmitting(false);
     }
   };
 
@@ -229,7 +293,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleDismiss}
       title="设置"
       maxWidth="560px"
       className="settings-modal-dialog"
@@ -284,7 +348,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 type="text"
                 className="meta-input form-input"
                 value={inputUrl}
-                onChange={(e) => setInputUrl(e.target.value)}
+                onChange={(e) => handleUrlChange(e.target.value)}
                 placeholder="http://127.0.0.1:9090"
               />
             </div>
@@ -311,6 +375,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
+          </div>
+
+          <div className="remember-secret-setting">
+            <div className="remember-secret-copy">
+              <label className="remember-secret-label" htmlFor="modal-remember-secret">记住密钥</label>
+              <span id="remember-secret-help" className="remember-secret-help">
+                仅保存在此浏览器；共享设备请勿开启
+              </span>
+              {rememberError && <span className="remember-secret-error" role="alert">{rememberError}</span>}
+            </div>
+            <label className="toggle-switch" htmlFor="modal-remember-secret">
+              <input
+                id="modal-remember-secret"
+                type="checkbox"
+                checked={rememberCredential}
+                onChange={(e) => handleRememberChange(e.target.checked)}
+                aria-describedby="remember-secret-help"
+              />
+              <span className="toggle-slider" />
+            </label>
           </div>
 
           {/* Mixed Content Warning */}

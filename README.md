@@ -42,7 +42,7 @@
 
 6. **控制器配置与排障 (Config & Settings)**
    - **外部控制器连接配置**：可自定义控制器 API 基础地址（默认 `http://127.0.0.1:9090`）与访问密钥 (Secret)。
-   - **凭据安全设计**：Controller Secret 仅在当前标签页会话的内存及 `sessionStorage` 中暂存，**绝不写入持久化 `localStorage`**，杜绝凭据泄漏隐患。
+   - **凭据安全设计**：默认仅在当前标签页会话的内存及 `sessionStorage` 中暂存 Secret。用户可选择「记住密钥」，且仅在连接验证成功后，才将与控制器 URL 绑定的凭据记录保存至当前浏览器同源 `localStorage`；取消勾选会删除该持久记录。该记录可被本地浏览器环境或脚本访问，共享设备上请谨慎启用。
    - **CORS 与 Mixed Content 排障指引**：内置详细的跨域及 HTTPS 页面请求 HTTP 本地控制器的原理说明与解决方案。
    - **运行时参数调整**：支持动态调整 `mode`、`log-level`、`allow-lan`，并直观查看 Mixed/HTTP/SOCKS5/Redir/TProxy 监听端口。
    - **规范说明**：明确标明 Mihomo REST API 仅提供运行时参数动态调控接口，不提供全量 YAML 文件在线覆写接口，避免误导。
