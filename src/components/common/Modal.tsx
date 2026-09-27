@@ -26,6 +26,11 @@ export const Modal: React.FC<ModalProps> = ({
   const launcherRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
+  // Keep the latest onClose in a ref so focus initialization and key handling
+  // never re-run just because the parent recreated its close handler.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // 1. Capture launcher element when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -76,7 +81,7 @@ export const Modal: React.FC<ModalProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -115,7 +120,7 @@ export const Modal: React.FC<ModalProps> = ({
       clearTimeout(focusTimer);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

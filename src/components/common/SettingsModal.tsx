@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal } from './Modal';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { useToast } from './Toast';
@@ -82,6 +82,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const connectionStateRef = useRef({ baseUrl, secret, demoMode, status, apiClient });
   connectionStateRef.current = { baseUrl, secret, demoMode, status, apiClient };
 
+  // Stable close handler: keep the latest onClose in a ref so the modal's
+  // focus/Escape effect is not re-triggered by parent re-renders or typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (isOpen) {
       setInputUrl(baseUrl);
@@ -101,11 +106,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const mixedContentRisk = checkMixedContentRisk(inputUrl);
   const isRealConnected = !demoMode && status === 'connected';
 
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     submitGenerationRef.current++;
     cancelPendingRemember();
-    onClose();
-  };
+    onCloseRef.current();
+  }, [cancelPendingRemember]);
 
   const handleUrlChange = (nextUrl: string) => {
     setInputUrl(nextUrl);

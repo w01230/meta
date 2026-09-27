@@ -991,6 +991,17 @@
   }
 }
 
+/* Tablet / large touch screens: the 44px touch box above would otherwise push
+   the flags to a 44px rhythm, which reads much looser than the 28px desktop
+   rhythm (26px box + 2px gap). Overlap the touch boxes with negative inline
+   margins so the icon pitch matches desktop while the 44px tap target remains.
+   Phones keep the previous spacing to protect tap accuracy on small screens. */
+@media (pointer: coarse) and (min-width: 701px) {
+  .compact-node-btn {
+    margin-inline: -8px;
+  }
+}
+
 @media (max-width: 390px) {
   .proxy-collapsed-row {
     align-items: flex-start;
