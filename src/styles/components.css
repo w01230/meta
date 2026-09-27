@@ -862,15 +862,28 @@
   min-width: 18px;
   min-height: 18px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.18);
+  position: relative;
+  border: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #FFFFFF;
+  background: transparent;
   box-sizing: border-box;
-  transition: all 0.15s ease;
-  overflow: hidden;
-  --ring-color: rgba(0, 0, 0, 0.18);
+  overflow: visible;
+  --ring-color: #64748B;
+}
+
+.compact-flag-ring::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #FFFFFF;
+  border-radius: 50%;
+  background: var(--ring-color);
+  box-shadow: 0 0 0 0.5px rgba(15, 23, 42, 0.12);
 }
 
 /* In the collapsed view, keep the flags at the leading edge and show only
@@ -902,28 +915,23 @@
 }
 
 .compact-flag-ring.ring-fast {
-  border-color: var(--status-green);
-  --ring-color: var(--status-green);
+  --ring-color: #16A34A;
 }
 
 .compact-flag-ring.ring-medium {
-  border-color: var(--status-amber);
-  --ring-color: var(--status-amber);
+  --ring-color: #EAB308;
 }
 
 .compact-flag-ring.ring-slow {
-  border-color: #EA580C;
-  --ring-color: #EA580C;
+  --ring-color: #F97316;
 }
 
 .compact-flag-ring.ring-timeout {
-  border-color: var(--status-red);
-  --ring-color: var(--status-red);
+  --ring-color: #DC2626;
 }
 
 .compact-flag-ring.ring-untested {
-  border-color: rgba(0, 0, 0, 0.18);
-  --ring-color: rgba(0, 0, 0, 0.22);
+  --ring-color: #94A3B8;
 }
 
 @media (pointer: coarse), (max-width: 768px) {
@@ -983,12 +991,29 @@
 .conn-stats-group {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .conn-stat-item {
   display: flex;
   flex-direction: column;
+  gap: 3px;
+  min-width: 112px;
+  padding: 9px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 3px 12px rgba(20, 28, 20, 0.07), 0 1px 3px rgba(20, 28, 20, 0.035);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.conn-stat-item:hover {
+  border-color: rgba(100, 116, 139, 0.34);
+  background-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.11), 0 2px 5px rgba(15, 23, 42, 0.055);
 }
 
 .conn-stat-item .stat-label {
@@ -1000,6 +1025,24 @@
   font-size: 17px;
   font-weight: 700;
   color: var(--text-primary);
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.conn-stat-item:nth-child(2) {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.68), rgba(255, 255, 255, 0.3)), rgba(255, 255, 255, 0.78);
+}
+
+.conn-stat-item:nth-child(3) {
+  background: linear-gradient(135deg, rgba(250, 245, 255, 0.7), rgba(255, 255, 255, 0.3)), rgba(255, 255, 255, 0.78);
+}
+
+.conn-stat-item:nth-child(2):hover {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.82), rgba(255, 255, 255, 0.68)), rgba(255, 255, 255, 0.96);
+}
+
+.conn-stat-item:nth-child(3):hover {
+  background: linear-gradient(135deg, rgba(250, 245, 255, 0.84), rgba(255, 255, 255, 0.68)), rgba(255, 255, 255, 0.96);
 }
 
 .connections-filter-bar {

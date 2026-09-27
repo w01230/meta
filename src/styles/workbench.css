@@ -511,7 +511,7 @@
 .rate-legend-bar {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 12px;
   margin-bottom: 12px;
   font-size: 12.5px;
   font-weight: 500;
@@ -520,8 +520,38 @@
 .rate-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 3px 12px rgba(20, 28, 20, 0.07), 0 1px 3px rgba(20, 28, 20, 0.035);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.rate-legend-item:hover {
+  border-color: rgba(100, 116, 139, 0.34);
+  background-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.11), 0 2px 5px rgba(15, 23, 42, 0.055);
+}
+
+.rate-legend-down {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.68), rgba(255, 255, 255, 0.3)), rgba(255, 255, 255, 0.78);
+}
+
+.rate-legend-up {
+  background: linear-gradient(135deg, rgba(250, 245, 255, 0.7), rgba(255, 255, 255, 0.3)), rgba(255, 255, 255, 0.78);
+}
+
+.rate-legend-down:hover {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.82), rgba(255, 255, 255, 0.68)), rgba(255, 255, 255, 0.96);
+}
+
+.rate-legend-up:hover {
+  background: linear-gradient(135deg, rgba(250, 245, 255, 0.84), rgba(255, 255, 255, 0.68)), rgba(255, 255, 255, 0.96);
 }
 
 .legend-metrics {
@@ -1344,6 +1374,7 @@
 
   .rate-legend-item {
     flex: 1 1 145px;
+    padding: 8px 10px;
   }
 
   .overview-flow-header {
