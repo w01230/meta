@@ -3,6 +3,7 @@ import {
   MihomoVersion, 
   MihomoConfig, 
   ProxyItem, 
+  ProxyHistory,
   RuleItem, 
   ConnectionItem, 
   ConnectionsResponse, 
@@ -97,6 +98,7 @@ interface ControllerContextType {
   closeConnection: (id: string) => Promise<void>;
   closeAllConnections: () => Promise<void>;
   clearLogs: () => void;
+  pollProxies: (isStillEligible?: () => boolean) => Promise<boolean>;
   apiClient: MihomoApiClient;
 }
 
@@ -463,6 +465,112 @@ export async function executeBatchProxyDelay(
   }
 }
 
+export const PROXY_POLL_INTERVAL_MS = 30000;
+export const ELIGIBLE_POLL_TABS: readonly string[] = ['overview', 'proxies'] as const;
+
+export function isEligiblePollTab(tab: string): boolean {
+  return (ELIGIBLE_POLL_TABS as readonly string[]).includes(tab);
+}
+
+/**
+ * Gates polling on a successfully REST-verified active real controller:
+ * - Current view must be overview or proxies
+ * - Document must be visible (paused when hidden)
+ * - Real controller only (!demoMode)
+ * - REST-verified: version set after handshake, cleared on reset/disconnect
+ * - Avoids polling during terminal error (status 'disconnected' or 'error')
+ * - Transient WS stream loss (where status is 'connecting' but version is present) does NOT stop polling
+ * - API network errors wait for next 30s without clearing proxies
+ */
+export function isProxyPollingEligible(
+  currentTab: string,
+  isDocumentVisible: boolean,
+  demoMode: boolean,
+  version: MihomoVersion | null,
+  status: ConnectionStatus
+): boolean {
+  if (!isEligiblePollTab(currentTab)) return false;
+  if (!isDocumentVisible) return false;
+  if (demoMode) return false;
+  if (!version) return false;
+  if (status === 'disconnected' || status === 'error') return false;
+  return true;
+}
+
+/**
+ * Consistent narrow ordering policy across ALL whole-map proxy reads:
+ * - Generation & client identity must be valid.
+ * - If user initiated a mutation (e.g. manual testProxyDelay, switch) after this request
+ *   was dispatched, drop this older snapshot so it doesn't overwrite valid manual state.
+ * - Later dispatched request wins; drop out-of-order stale responses.
+ */
+export function shouldCommitProxySnapshot(
+  reqSeq: number,
+  lastCommittedSeq: number,
+  reqMutationEpoch: number,
+  currentMutationEpoch: number,
+  isActionValid: boolean
+): boolean {
+  if (!isActionValid) return false;
+  if (reqMutationEpoch !== currentMutationEpoch) return false;
+  if (reqSeq <= lastCommittedSeq) return false;
+  return true;
+}
+
+export const MAX_PROXY_HISTORY_LENGTH = 20;
+
+export function appendProxyHistory(
+  existingHistory: ProxyHistory[] | undefined,
+  entry: ProxyHistory,
+  maxLen: number = MAX_PROXY_HISTORY_LENGTH
+): ProxyHistory[] {
+  const list = existingHistory ? [...existingHistory, entry] : [entry];
+  return list.slice(-maxLen);
+}
+
+export interface ProxyPollingHandle {
+  stop: () => void;
+}
+
+export function startProxyPolling(
+  isEligible: () => boolean,
+  poll: () => Promise<unknown>,
+  intervalMs: number = PROXY_POLL_INTERVAL_MS
+): ProxyPollingHandle {
+  if (!isEligible()) {
+    return { stop: () => {} };
+  }
+
+  let stopped = false;
+  const executePoll = () => {
+    try {
+      Promise.resolve(poll()).catch(() => {
+        // Swallow unexpected callback rejection to avoid unhandled promise and maintain interval
+      });
+    } catch {
+      // Synchronous throw protection
+    }
+  };
+
+  executePoll();
+
+  const timer = setInterval(() => {
+    if (stopped || !isEligible()) {
+      clearInterval(timer);
+      stopped = true;
+      return;
+    }
+    executePoll();
+  }, intervalMs);
+
+  return {
+    stop: () => {
+      stopped = true;
+      clearInterval(timer);
+    }
+  };
+}
+
 export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [initialSnapshot] = useState<StorageSnapshot>(loadInitialControllerSnapshot);
 
@@ -529,6 +637,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const connectGenRef = useRef(0);
   const consentRevisionRef = useRef(0);
+  const proxyDispatchSeqRef = useRef<number>(0);
+  const lastCommittedProxySeqRef = useRef<number>(0);
+  const userMutationEpochRef = useRef<number>(0);
+  const inFlightPollRef = useRef<boolean>(false);
+  const statusRef = useRef<ConnectionStatus>(status);
+  statusRef.current = status;
+  const versionRef = useRef<MihomoVersion | null>(version);
+  versionRef.current = version;
   const [isRemembered, setIsRemembered] = useState<boolean>(() => initialSnapshot.isRemembered);
 
   // Cross-tab storage change sync for persistent credential state (never mutates active URL or secret)
@@ -622,12 +738,15 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setCurrentMemory(null);
     setMemoryHistory([]);
     setTrafficTotal({ upTotal: 0, downTotal: 0 });
+    userMutationEpochRef.current++;
+    lastCommittedProxySeqRef.current = ++proxyDispatchSeqRef.current;
     setProxies({});
     setRules([]);
     setConnections([]);
     setLogs([]);
     setUnreadLogCount(0);
     setVersion(null);
+    versionRef.current = null;
     setConfig(null);
   }, []);
 
@@ -643,6 +762,34 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
     },
     []
+  );
+
+  const commitProxySnapshot = useCallback(
+    (
+      reqSeq: number,
+      reqMutationEpoch: number,
+      actionGen: number,
+      client: MihomoApiClient | null,
+      isDemo: boolean,
+      nextProxies: Record<string, ProxyItem>
+    ): boolean => {
+      const isValid = isCurrentActionValid(actionGen, client, isDemo);
+      if (
+        !shouldCommitProxySnapshot(
+          reqSeq,
+          lastCommittedProxySeqRef.current,
+          reqMutationEpoch,
+          userMutationEpochRef.current,
+          isValid
+        )
+      ) {
+        return false;
+      }
+      lastCommittedProxySeqRef.current = reqSeq;
+      setProxies(nextProxies);
+      return true;
+    },
+    [isCurrentActionValid]
   );
 
   // Real connection initializer with request generation counter and atomic demo exit
@@ -735,9 +882,12 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       setVersion(handshake.version);
+      versionRef.current = handshake.version;
       const effectiveLogLevel = resolveEffectiveLogLevel(handshake.config?.['log-level']);
       setConfig({ ...handshake.config, 'log-level': effectiveLogLevel });
-      setProxies(handshake.proxies.proxies || {});
+      const reqSeq = ++proxyDispatchSeqRef.current;
+      const reqMutationEpoch = userMutationEpochRef.current;
+      commitProxySnapshot(reqSeq, reqMutationEpoch, gen, client, false, handshake.proxies.proxies || {});
       setRules(handshake.rules.rules || []);
       setConnections(handshake.connections.connections || []);
       setTrafficTotal({
@@ -910,7 +1060,10 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setStatus('connected');
       setStatusError(null);
       setVersion(DEMO_VERSION);
+      versionRef.current = DEMO_VERSION;
       setConfig(DEMO_CONFIG);
+      userMutationEpochRef.current++;
+      lastCommittedProxySeqRef.current = ++proxyDispatchSeqRef.current;
       setProxies({ ...DEMO_PROXIES });
       setRules([...DEMO_RULES]);
       setConnections(createInitialDemoConnections());
@@ -1019,12 +1172,16 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
+      userMutationEpochRef.current++;
+      lastCommittedProxySeqRef.current = ++proxyDispatchSeqRef.current;
       setProxies({ ...DEMO_PROXIES });
       setRules([...DEMO_RULES]);
       return;
     }
-    if (status === 'connected') {
+    if (status === 'connected' || (versionRef.current && status !== 'disconnected')) {
       try {
+        const reqSeq = ++proxyDispatchSeqRef.current;
+        const reqMutationEpoch = userMutationEpochRef.current;
         const [p, r, c, cfg] = await Promise.all([
           client.getProxies(),
           client.getRules(),
@@ -1034,7 +1191,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!isCurrentActionValid(actionGen, client, isDemo)) {
           throw new ActionCancelledError();
         }
-        setProxies(p.proxies || {});
+        commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, p.proxies || {});
         setRules(r.rules || []);
         setConnections(c.connections || []);
         setTrafficTotal({ upTotal: c.uploadTotal || 0, downTotal: c.downloadTotal || 0 });
@@ -1064,6 +1221,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
+      userMutationEpochRef.current++;
       setProxies((prev) => {
         const currentGroup = prev[groupName];
         if (!currentGroup) return prev;
@@ -1081,16 +1239,19 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     try {
+      userMutationEpochRef.current++;
       await client.switchProxy(groupName, selectedNode);
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
-      // Refresh proxies after switch
+      // Refresh proxies after switch using consistent ordering policy
+      const reqSeq = ++proxyDispatchSeqRef.current;
+      const reqMutationEpoch = userMutationEpochRef.current;
       const p = await client.getProxies();
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
-      setProxies(p.proxies || {});
+      commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, p.proxies || {});
     } catch (err: unknown) {
       if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
         throw isActionCancelledError(err) ? err : new ActionCancelledError();
@@ -1108,6 +1269,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
+      userMutationEpochRef.current++;
       setProxies((prev) => {
         const currentGroup = prev[groupName];
         if (!currentGroup) return prev;
@@ -1125,15 +1287,18 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     try {
+      userMutationEpochRef.current++;
       await client.unfixProxy(groupName);
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
+      const reqSeq = ++proxyDispatchSeqRef.current;
+      const reqMutationEpoch = userMutationEpochRef.current;
       const p = await client.getProxies();
       if (!isCurrentActionValid(actionGen, client, isDemo)) {
         throw new ActionCancelledError();
       }
-      setProxies(p.proxies || {});
+      commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, p.proxies || {});
     } catch (err: unknown) {
       if (!isCurrentActionValid(actionGen, client, isDemo) || isActionCancelledError(err)) {
         throw isActionCancelledError(err) ? err : new ActionCancelledError();
@@ -1154,10 +1319,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         throw new ActionCancelledError();
       }
       const simulatedDelay = Math.floor(30 + Math.random() * 90);
+      userMutationEpochRef.current++;
       setProxies((prev) => {
         const node = prev[nodeName];
         if (!node) return prev;
-        const history = [{ time: new Date().toISOString(), delay: simulatedDelay }, ...(node.history || [])];
+        const history = appendProxyHistory(node.history, {
+          time: new Date().toISOString(),
+          delay: simulatedDelay
+        });
         return {
           ...prev,
           [nodeName]: {
@@ -1175,10 +1344,14 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         throw new ActionCancelledError();
       }
       // Update local state for immediate feedback
+      userMutationEpochRef.current++;
       setProxies((prev) => {
         const node = prev[nodeName];
         if (!node) return prev;
-        const history = [{ time: new Date().toISOString(), delay }, ...(node.history || [])];
+        const history = appendProxyHistory(node.history, {
+          time: new Date().toISOString(),
+          delay
+        });
         return {
           ...prev,
           [nodeName]: {
@@ -1346,6 +1519,53 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setUnreadLogCount(0);
   };
 
+  const pollProxies = useCallback(
+    async (isStillValid?: () => boolean): Promise<boolean> => {
+      // Must be active REST-verified real controller (not demo, not terminal)
+      if (
+        demoModeRef.current ||
+        !versionRef.current ||
+        statusRef.current === 'disconnected' ||
+        statusRef.current === 'error'
+      ) {
+        return false;
+      }
+      // Immediate validity check before dispatching network request
+      if (isStillValid && !isStillValid()) {
+        return false;
+      }
+      // Concurrency guard: avoid overlapping in-flight network requests
+      if (inFlightPollRef.current) {
+        return false;
+      }
+
+      inFlightPollRef.current = true;
+      const actionGen = connectGenRef.current;
+      const client = apiClientRef.current;
+      const isDemo = demoModeRef.current;
+      const reqSeq = ++proxyDispatchSeqRef.current;
+      const reqMutationEpoch = userMutationEpochRef.current;
+
+      try {
+        const res = await client.getProxies();
+        if (isStillValid && !isStillValid()) {
+          return false;
+        }
+        // Atomically replace entire map via consistent whole-map ordering and mutation guard
+        if (res && res.proxies) {
+          return commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, res.proxies);
+        }
+        return false;
+      } catch {
+        // Do not clear proxies on poll failure; avoid unhandled rejections and a retry storm
+        return false;
+      } finally {
+        inFlightPollRef.current = false;
+      }
+    },
+    [commitProxySnapshot]
+  );
+
   return (
     <ControllerContext.Provider
       value={{
@@ -1385,6 +1605,7 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         cancelPendingRemember,
         connectController,
         refreshAll,
+        pollProxies,
         switchProxy,
         unfixProxy,
         testProxyDelay,

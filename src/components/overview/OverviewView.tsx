@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { formatBytes, getLatencyInfo } from '../../utils/format';
-import { sortProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
+import { sortProxyGroups, sanitizeDisplayName, getLatestProxyDelay } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import { TrafficRateChart } from './TrafficRateChart';
 import { RuleFlowPanel } from './RuleFlowPanel';
@@ -421,7 +421,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 const isSelector = group.type === 'Selector';
                 const currentNode = group.now || '';
                 const nodeItem = proxies[currentNode];
-                const latestDelay = nodeItem?.history?.[0]?.delay;
+                const latestDelay = getLatestProxyDelay(nodeItem);
                 const latency = getLatencyInfo(latestDelay);
                 const isTesting = testingNodes[currentNode];
 
@@ -585,7 +585,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {(selectedGroupForSwitch.all || []).map((nodeName) => {
                 const isSelected = selectedGroupForSwitch.now === nodeName;
                 const nodeItem = proxies[nodeName];
-                const delay = nodeItem?.history?.[0]?.delay;
+                const delay = getLatestProxyDelay(nodeItem);
 
                 return (
                   <button

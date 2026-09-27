@@ -410,13 +410,19 @@ export function sortProxyGroups(groups: ProxyItem[]): ProxyItem[] {
   return [...sortedReferenced, ...unreferencedGroups];
 }
 
+/** Returns the most recently reported delay for a proxy, if it has history. */
+export function getLatestProxyDelay(proxy?: ProxyItem): number | undefined {
+  const history = proxy?.history;
+  return history?.length ? history[history.length - 1].delay : undefined;
+}
+
 /** Sorts nodes by successful positive delay, keeping timed-out/invalid results last and ties stable. */
 export function sortProxyNodesByDelay(
   nodes: string[],
   proxies: Record<string, ProxyItem>
 ): string[] {
   return nodes
-    .map((name, index) => ({ name, index, delay: proxies[name]?.history?.[0]?.delay }))
+    .map((name, index) => ({ name, index, delay: getLatestProxyDelay(proxies[name]) }))
     .sort((a, b) => {
       const aValid = typeof a.delay === 'number' && Number.isFinite(a.delay) && a.delay > 0;
       const bValid = typeof b.delay === 'number' && Number.isFinite(b.delay) && b.delay > 0;

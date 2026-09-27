@@ -4,6 +4,7 @@ import { getLatencyInfo } from '../utils/format';
 import {
   sortProxyGroups,
   sortProxyNodesByDelay,
+  getLatestProxyDelay,
   filterProxyGroups,
   matchRegionFlag,
   matchRegionCode,
@@ -210,6 +211,39 @@ describe('Proxy and Connection utilities', () => {
   });
 
   describe('sortProxyNodesByDelay', () => {
+    it('uses the last history entry as the latest delay and handles missing or empty history', () => {
+      const proxies: Record<string, ProxyItem> = {
+        updated: { name: 'updated', type: 'Node', history: [
+          { time: 'old', delay: 90 },
+          { time: 'new', delay: 15 }
+        ] },
+        noHistory: { name: 'noHistory', type: 'Node' },
+        emptyHistory: { name: 'emptyHistory', type: 'Node', history: [] }
+      };
+
+      expect(getLatestProxyDelay(proxies.updated)).toBe(15);
+      expect(getLatestProxyDelay(proxies.noHistory)).toBeUndefined();
+      expect(getLatestProxyDelay(proxies.emptyHistory)).toBeUndefined();
+      expect(getLatestProxyDelay(undefined)).toBeUndefined();
+    });
+
+    it('sorts using the latest delay when history has multiple entries', () => {
+      const nodes = ['formerlyFast', 'nowFast', 'untested'];
+      const proxies: Record<string, ProxyItem> = {
+        formerlyFast: { name: 'formerlyFast', type: 'Node', history: [
+          { time: 'old', delay: 10 },
+          { time: 'new', delay: 120 }
+        ] },
+        nowFast: { name: 'nowFast', type: 'Node', history: [
+          { time: 'old', delay: 150 },
+          { time: 'new', delay: 20 }
+        ] },
+        untested: { name: 'untested', type: 'Node', history: [] }
+      };
+
+      expect(sortProxyNodesByDelay(nodes, proxies)).toEqual(['nowFast', 'formerlyFast', 'untested']);
+    });
+
     it('puts positive finite delays first and treats zero, invalid, and missing delays as last', () => {
       const nodes = ['timeout', 'fast', 'negative', 'missing', 'slow', 'infinite', 'nan'];
       const proxies: Record<string, ProxyItem> = {

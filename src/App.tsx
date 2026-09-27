@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ControllerProvider, useController } from './context/ControllerContext';
+import {
+  ControllerProvider,
+  useController,
+  isProxyPollingEligible,
+  startProxyPolling
+} from './context/ControllerContext';
 import { ToastProvider } from './components/common/Toast';
 import { TooltipProvider } from './components/common/TooltipProvider';
 import { Navbar } from './components/common/Navbar';
@@ -25,7 +30,7 @@ export function shouldAutoOpenSettings(
 }
 
 export const AppContent: React.FC = () => {
-  const { hasConfiguredController, status, demoMode } = useController();
+  const { hasConfiguredController, status, version, demoMode, pollProxies } = useController();
 
   // Helper to determine initial tab and settings modal visibility from URL hash
   const [initial] = useState(() => {
@@ -74,6 +79,34 @@ export const AppContent: React.FC = () => {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document !== 'undefined' ? document.visibilityState === 'visible' : true
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(document.visibilityState === 'visible');
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Periodic polling of GET /proxies every 30s only while current view is overview or proxies,
+  // document is visible, and connected to active REST-verified real controller.
+  useEffect(() => {
+    let active = true;
+    const isEligible = () =>
+      active && isProxyPollingEligible(currentTab, isDocumentVisible, demoMode, version, status);
+
+    const handle = startProxyPolling(isEligible, () => pollProxies(isEligible));
+
+    return () => {
+      active = false;
+      handle.stop();
+    };
+  }, [currentTab, isDocumentVisible, demoMode, version, status, pollProxies]);
 
   const handleSelectTab = (tab: string) => {
     if (tab === 'config') {

@@ -4,7 +4,7 @@ import { getLatencyInfo } from '../../utils/format';
 import { Search, Zap, X, Shield, ArrowUpDown, Navigation, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { RunMode, ProxyItem } from '../../types/api';
-import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName } from '../../utils/proxy';
+import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getLatestProxyDelay } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import {
   getStoredProxiesIsCompact,
@@ -256,7 +256,7 @@ export const ProxiesView: React.FC = () => {
             // currently active node, not a requested fixed node that may be unhealthy.
             const activeNodeName = group.now;
             const activeNode = activeNodeName ? proxies[activeNodeName] : undefined;
-            const activeDelay = activeNode?.history?.[0]?.delay;
+            const activeDelay = getLatestProxyDelay(activeNode);
             const selectedLatency = getLatencyInfo(activeDelay);
 
             return (
@@ -358,7 +358,7 @@ export const ProxiesView: React.FC = () => {
                       {sortedNodes.map((nodeName) => {
                         const isSelected = isFixed ? group.fixed === nodeName : group.now === nodeName;
                         const node = proxies[nodeName];
-                        const latestDelay = node?.history?.[0]?.delay;
+                        const latestDelay = getLatestProxyDelay(node);
                         const latency = getLatencyInfo(latestDelay);
 
                         const tooltipText = isFixed && group.fixed === nodeName
@@ -408,7 +408,7 @@ export const ProxiesView: React.FC = () => {
                     {sortedNodes.map((nodeName) => {
                       const isSelected = isFixed ? group.fixed === nodeName : group.now === nodeName;
                       const node = proxies[nodeName];
-                      const latestDelay = node?.history?.[0]?.delay;
+                      const latestDelay = getLatestProxyDelay(node);
                       const latency = getLatencyInfo(latestDelay);
                       const isTesting = !!testingNodes[nodeName];
 
