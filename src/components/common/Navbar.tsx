@@ -125,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="brand-logo-ring">
             {!logoFailed ? (
               <img
-                src="/meta-logo.png"
+                src={`${import.meta.env.BASE_URL}meta-logo.png`}
                 alt="META"
                 className="brand-logo-img"
                 onError={() => setLogoFailed(true)}
