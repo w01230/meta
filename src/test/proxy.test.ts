@@ -5,6 +5,9 @@ import {
   sortProxyGroups,
   sortProxyNodesByDelay,
   getLatestProxyDelay,
+  getActiveProxyDelay,
+  getActiveProxyLeaf,
+  resolveActiveProxyLeafNames,
   filterProxyGroups,
   matchRegionFlag,
   matchRegionCode,
@@ -244,6 +247,19 @@ describe('Proxy and Connection utilities', () => {
       expect(sortProxyNodesByDelay(nodes, proxies)).toEqual(['nowFast', 'formerlyFast', 'untested']);
     });
 
+    it('sorts nested groups by their active leaf delays rather than group history', () => {
+      const nodes = ['slowGroup', 'fastGroup', 'missingRoute'];
+      const proxies: Record<string, ProxyItem> = {
+        slowGroup: { name: 'slowGroup', type: 'Selector', now: 'slowLeaf', history: [{ time: '', delay: 1 }] },
+        fastGroup: { name: 'fastGroup', type: 'URLTest', now: 'fastLeaf', history: [{ time: '', delay: 500 }] },
+        slowLeaf: { name: 'slowLeaf', type: 'Node', history: [{ time: '', delay: 131 }] },
+        fastLeaf: { name: 'fastLeaf', type: 'Node', history: [{ time: '', delay: 36 }] },
+        missingRoute: { name: 'missingRoute', type: 'Selector', now: 'missing' }
+      };
+
+      expect(sortProxyNodesByDelay(nodes, proxies)).toEqual(['fastGroup', 'slowGroup', 'missingRoute']);
+    });
+
     it('puts positive finite delays first and treats zero, invalid, and missing delays as last', () => {
       const nodes = ['timeout', 'fast', 'negative', 'missing', 'slow', 'infinite', 'nan'];
       const proxies: Record<string, ProxyItem> = {
@@ -272,6 +288,78 @@ describe('Proxy and Connection utilities', () => {
       expect(sortProxyNodesByDelay(nodes, proxies)).toEqual([
         'equal-a', 'equal-b', 'timeout-a', 'timeout-b'
       ]);
+    });
+  });
+
+  describe('getActiveProxyDelay', () => {
+    it('resolves the real Selector → URLTest → leaf chain to the leaf history', () => {
+      const proxies: Record<string, ProxyItem> = {
+        'HKG.PRIO': { name: 'HKG.PRIO', type: 'Selector', now: 'HKG' },
+        HKG: { name: 'HKG', type: 'URLTest', now: 'HKG-01' },
+        'HKG-01': { name: 'HKG-01', type: 'Shadowsocks', history: [{ time: '', delay: 36 }] }
+      };
+
+      expect(getActiveProxyDelay(proxies['HKG.PRIO'], proxies)).toBe(36);
+      expect(getActiveProxyDelay(proxies.HKG, proxies)).toBe(36);
+    });
+
+    it('follows multiple nested groups until the active leaf', () => {
+      const proxies: Record<string, ProxyItem> = {
+        Root: { name: 'Root', type: 'Selector', now: 'Middle' },
+        Middle: { name: 'Middle', type: 'Selector', now: 'Inner' },
+        Inner: { name: 'Inner', type: 'URLTest', now: 'Leaf' },
+        Leaf: { name: 'Leaf', type: 'Node', history: [{ time: '', delay: 71 }] }
+      };
+
+      expect(getActiveProxyDelay(proxies.Root, proxies)).toBe(71);
+    });
+
+    it('returns undefined for missing targets and cycles, without using group history', () => {
+      const proxies: Record<string, ProxyItem> = {
+        Missing: { name: 'Missing', type: 'Selector', now: 'Absent', history: [{ time: '', delay: 5 }] },
+        CycleA: { name: 'CycleA', type: 'Selector', now: 'CycleB', history: [{ time: '', delay: 6 }] },
+        CycleB: { name: 'CycleB', type: 'Selector', now: 'CycleA', history: [{ time: '', delay: 7 }] },
+        Untested: { name: 'Untested', type: 'Node', history: [] },
+        NoSelection: { name: 'NoSelection', type: 'Selector', history: [{ time: '', delay: 8 }] }
+      };
+
+      expect(getActiveProxyDelay(proxies.Missing, proxies)).toBeUndefined();
+      expect(getActiveProxyDelay(proxies.CycleA, proxies)).toBeUndefined();
+      expect(getActiveProxyDelay(proxies.Untested, proxies)).toBeUndefined();
+      expect(getActiveProxyDelay(proxies.NoSelection, proxies)).toBeUndefined();
+      expect(getActiveProxyDelay(undefined, proxies)).toBeUndefined();
+    });
+
+    it('keeps direct leaf delays and follows now rather than fixed selection', () => {
+      const proxies: Record<string, ProxyItem> = {
+        Direct: { name: 'Direct', type: 'Node', history: [{ time: '', delay: 131 }] },
+        Selector: { name: 'Selector', type: 'Selector', now: 'Fallback', fixed: 'Fixed' },
+        Fallback: { name: 'Fallback', type: 'URLTest', now: 'FallbackLeaf' },
+        FallbackLeaf: { name: 'FallbackLeaf', type: 'Node', history: [{ time: '', delay: 71 }] },
+        Fixed: { name: 'Fixed', type: 'Node', history: [{ time: '', delay: 5 }] }
+      };
+
+      expect(getActiveProxyDelay(proxies.Direct, proxies)).toBe(131);
+      expect(getActiveProxyDelay(proxies.Selector, proxies)).toBe(71);
+    });
+  });
+
+  describe('getActiveProxyLeaf', () => {
+    it('returns the resolved leaf and maps nested names to deduplicated active leaves', () => {
+      const proxies: Record<string, ProxyItem> = {
+        Parent: { name: 'Parent', type: 'Selector', now: 'Child' },
+        Child: { name: 'Child', type: 'URLTest', now: 'Leaf' },
+        Parent2: { name: 'Parent2', type: 'Selector', now: 'Leaf' },
+        Leaf: { name: 'Leaf', type: 'Node', history: [{ time: '', delay: 36 }] },
+        Missing: { name: 'Missing', type: 'Selector', now: 'Absent' },
+        CycleA: { name: 'CycleA', type: 'Selector', now: 'CycleB' },
+        CycleB: { name: 'CycleB', type: 'Selector', now: 'CycleA' }
+      };
+
+      expect(getActiveProxyLeaf(proxies.Parent, proxies)).toBe(proxies.Leaf);
+      expect(getActiveProxyLeaf(proxies.Missing, proxies)).toBeUndefined();
+      expect(getActiveProxyLeaf(proxies.CycleA, proxies)).toBeUndefined();
+      expect(resolveActiveProxyLeafNames(['Parent', 'Child', 'Parent2', 'Missing', 'CycleA'], proxies)).toEqual(['Leaf']);
     });
   });
 

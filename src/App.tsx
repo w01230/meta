@@ -95,10 +95,19 @@ export const AppContent: React.FC = () => {
 
   // Periodic polling of GET /proxies every 30s only while current view is overview or proxies,
   // document is visible, and connected to active REST-verified real controller.
+  const isProxyPollEligible = isProxyPollingEligible(
+    currentTab,
+    isDocumentVisible,
+    demoMode,
+    version,
+    status
+  );
+
   useEffect(() => {
+    if (!isProxyPollEligible) return;
+
     let active = true;
-    const isEligible = () =>
-      active && isProxyPollingEligible(currentTab, isDocumentVisible, demoMode, version, status);
+    const isEligible = () => active;
 
     const handle = startProxyPolling(isEligible, () => pollProxies(isEligible));
 
@@ -106,7 +115,7 @@ export const AppContent: React.FC = () => {
       active = false;
       handle.stop();
     };
-  }, [currentTab, isDocumentVisible, demoMode, version, status, pollProxies]);
+  }, [isProxyPollEligible, pollProxies]);
 
   const handleSelectTab = (tab: string) => {
     if (tab === 'config') {

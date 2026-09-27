@@ -571,6 +571,48 @@ export function startProxyPolling(
   };
 }
 
+type ProxyPollSource = { generation: number; client: MihomoApiClient };
+
+/** Coalesces overlapping poll requests into at most one fresh follow-up read. */
+export function createCoalescedProxyPollRunner(
+  getSource: () => ProxyPollSource,
+  isSameSource: (a: ProxyPollSource, b: ProxyPollSource) => boolean,
+  execute: (isStillValid: (() => boolean) | undefined) => Promise<boolean>
+): (isStillValid?: () => boolean) => Promise<boolean> {
+  let inFlight = false;
+  let pending: { isStillValid?: () => boolean; source: ProxyPollSource } | undefined;
+
+  const run = async (isStillValid?: () => boolean): Promise<boolean> => {
+    const source = getSource();
+    if (inFlight) {
+      pending = { isStillValid, source };
+      return false;
+    }
+
+    inFlight = true;
+    try {
+      return await execute(isStillValid);
+    } finally {
+      inFlight = false;
+      const queued = pending;
+      pending = undefined;
+      if (
+        queued &&
+        (!queued.isStillValid || queued.isStillValid()) &&
+        isSameSource(queued.source, getSource())
+      ) {
+        // Deliberately do not await or retry this follow-up on failure. The regular
+        // interval remains the retry mechanism.
+        void run(queued.isStillValid).catch(() => {
+          // Match startProxyPolling's protection against unhandled callback rejection.
+        });
+      }
+    }
+  };
+
+  return run;
+}
+
 export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [initialSnapshot] = useState<StorageSnapshot>(loadInitialControllerSnapshot);
 
@@ -640,7 +682,6 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const proxyDispatchSeqRef = useRef<number>(0);
   const lastCommittedProxySeqRef = useRef<number>(0);
   const userMutationEpochRef = useRef<number>(0);
-  const inFlightPollRef = useRef<boolean>(false);
   const statusRef = useRef<ConnectionStatus>(status);
   statusRef.current = status;
   const versionRef = useRef<MihomoVersion | null>(version);
@@ -1519,51 +1560,52 @@ export const ControllerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setUnreadLogCount(0);
   };
 
-  const pollProxies = useCallback(
-    async (isStillValid?: () => boolean): Promise<boolean> => {
-      // Must be active REST-verified real controller (not demo, not terminal)
-      if (
-        demoModeRef.current ||
-        !versionRef.current ||
-        statusRef.current === 'disconnected' ||
-        statusRef.current === 'error'
-      ) {
-        return false;
-      }
-      // Immediate validity check before dispatching network request
-      if (isStillValid && !isStillValid()) {
-        return false;
-      }
-      // Concurrency guard: avoid overlapping in-flight network requests
-      if (inFlightPollRef.current) {
-        return false;
-      }
-
-      inFlightPollRef.current = true;
-      const actionGen = connectGenRef.current;
-      const client = apiClientRef.current;
-      const isDemo = demoModeRef.current;
-      const reqSeq = ++proxyDispatchSeqRef.current;
-      const reqMutationEpoch = userMutationEpochRef.current;
-
-      try {
-        const res = await client.getProxies();
+  const proxyPollRunnerRef = useRef<((isStillValid?: () => boolean) => Promise<boolean>) | null>(null);
+  if (!proxyPollRunnerRef.current) {
+    proxyPollRunnerRef.current = createCoalescedProxyPollRunner(
+      () => ({ generation: connectGenRef.current, client: apiClientRef.current }),
+      (a, b) => a.generation === b.generation && a.client === b.client,
+      async (isStillValid) => {
+        // Must be active REST-verified real controller (not demo, not terminal)
+        if (
+          demoModeRef.current ||
+          !versionRef.current ||
+          statusRef.current === 'disconnected' ||
+          statusRef.current === 'error'
+        ) {
+          return false;
+        }
+        // Immediate validity check before dispatching network request
         if (isStillValid && !isStillValid()) {
           return false;
         }
-        // Atomically replace entire map via consistent whole-map ordering and mutation guard
-        if (res && res.proxies) {
-          return commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, res.proxies);
+
+        const actionGen = connectGenRef.current;
+        const client = apiClientRef.current;
+        const isDemo = demoModeRef.current;
+        const reqSeq = ++proxyDispatchSeqRef.current;
+        const reqMutationEpoch = userMutationEpochRef.current;
+
+        try {
+          const res = await client.getProxies();
+          if (isStillValid && !isStillValid()) {
+            return false;
+          }
+          // Atomically replace entire map via consistent whole-map ordering and mutation guard
+          if (res && res.proxies) {
+            return commitProxySnapshot(reqSeq, reqMutationEpoch, actionGen, client, isDemo, res.proxies);
+          }
+          return false;
+        } catch {
+          // Do not clear proxies on poll failure; avoid unhandled rejections and a retry storm
+          return false;
         }
-        return false;
-      } catch {
-        // Do not clear proxies on poll failure; avoid unhandled rejections and a retry storm
-        return false;
-      } finally {
-        inFlightPollRef.current = false;
       }
-    },
-    [commitProxySnapshot]
+    );
+  }
+  const pollProxies = useCallback(
+    (isStillValid?: () => boolean): Promise<boolean> => proxyPollRunnerRef.current!(isStillValid),
+    []
   );
 
   return (

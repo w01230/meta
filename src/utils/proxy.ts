@@ -416,13 +416,63 @@ export function getLatestProxyDelay(proxy?: ProxyItem): number | undefined {
   return history?.length ? history[history.length - 1].delay : undefined;
 }
 
+/** Resolves a proxy's current `now` route through nested groups to its active leaf. */
+export function getActiveProxyLeaf(
+  proxy: ProxyItem | undefined,
+  proxies: Record<string, ProxyItem>
+): ProxyItem | undefined {
+  const visited = new Set<string>();
+  let current = proxy;
+
+  while (current) {
+    if (visited.has(current.name)) return undefined;
+    visited.add(current.name);
+
+    if (!current.now) {
+      const isGroup = current.all !== undefined ||
+        ['Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay', 'Smart'].includes(current.type);
+      return isGroup ? undefined : current;
+    }
+    current = proxies[current.now];
+  }
+
+  return undefined;
+}
+
+/** Returns the active leaf's latest measurement, never falling back to a group result. */
+export function getActiveProxyDelay(
+  proxy: ProxyItem | undefined,
+  proxies: Record<string, ProxyItem>
+): number | undefined {
+  return getLatestProxyDelay(getActiveProxyLeaf(proxy, proxies));
+}
+
+/** Resolves names to active leaves and removes duplicates; unresolved routes are omitted. */
+export function resolveActiveProxyLeafNames(
+  names: string[],
+  proxies: Record<string, ProxyItem>
+): string[] {
+  const seen = new Set<string>();
+  const resolved: string[] = [];
+
+  for (const name of names) {
+    const leaf = getActiveProxyLeaf(proxies[name], proxies);
+    if (leaf && !seen.has(leaf.name)) {
+      seen.add(leaf.name);
+      resolved.push(leaf.name);
+    }
+  }
+
+  return resolved;
+}
+
 /** Sorts nodes by successful positive delay, keeping timed-out/invalid results last and ties stable. */
 export function sortProxyNodesByDelay(
   nodes: string[],
   proxies: Record<string, ProxyItem>
 ): string[] {
   return nodes
-    .map((name, index) => ({ name, index, delay: getLatestProxyDelay(proxies[name]) }))
+    .map((name, index) => ({ name, index, delay: getActiveProxyDelay(proxies[name], proxies) }))
     .sort((a, b) => {
       const aValid = typeof a.delay === 'number' && Number.isFinite(a.delay) && a.delay > 0;
       const bValid = typeof b.delay === 'number' && Number.isFinite(b.delay) && b.delay > 0;

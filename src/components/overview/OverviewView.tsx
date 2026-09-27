@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { formatBytes, getLatencyInfo } from '../../utils/format';
-import { sortProxyGroups, sanitizeDisplayName, getLatestProxyDelay } from '../../utils/proxy';
+import { sortProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import { TrafficRateChart } from './TrafficRateChart';
 import { RuleFlowPanel } from './RuleFlowPanel';
@@ -421,9 +421,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 const isSelector = group.type === 'Selector';
                 const currentNode = group.now || '';
                 const nodeItem = proxies[currentNode];
-                const latestDelay = getLatestProxyDelay(nodeItem);
+                const latestDelay = getActiveProxyDelay(group, proxies);
                 const latency = getLatencyInfo(latestDelay);
-                const isTesting = testingNodes[currentNode];
+                const testTarget = getActiveProxyLeaf(group, proxies)?.name;
+                const isTesting = !!(testTarget && testingNodes[testTarget]);
 
                 // Real node protocol from nodeItem.type (no fake multiplier!)
                 const nodeProto = nodeItem?.type || (currentNode === 'DIRECT' ? 'Direct' : 'Proxy');
@@ -470,10 +471,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         <button
                           type="button"
                           className="btn-circle-action size-md"
-                          onClick={(e) => handleTestDelay(e, currentNode)}
-                          disabled={!currentNode || isTesting}
-                          data-tooltip={`测速 ${currentNode}`}
-                          aria-label={`测速 ${currentNode}`}
+                          onClick={(e) => { if (testTarget) void handleTestDelay(e, testTarget); }}
+                          disabled={!currentNode || !testTarget || isTesting}
+                          data-tooltip={testTarget ? `测速 ${testTarget}` : '当前路由无法测速'}
+                          aria-label={testTarget ? `测速 ${testTarget}` : '当前路由无法测速'}
                         >
                           <Zap size={14} className={isTesting ? 'spin-animation' : ''} />
                         </button>
@@ -585,7 +586,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {(selectedGroupForSwitch.all || []).map((nodeName) => {
                 const isSelected = selectedGroupForSwitch.now === nodeName;
                 const nodeItem = proxies[nodeName];
-                const delay = getLatestProxyDelay(nodeItem);
+                const delay = getActiveProxyDelay(nodeItem, proxies);
 
                 return (
                   <button

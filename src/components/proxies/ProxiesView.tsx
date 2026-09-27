@@ -4,7 +4,7 @@ import { getLatencyInfo } from '../../utils/format';
 import { Search, Zap, X, Shield, ArrowUpDown, Navigation, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { RunMode, ProxyItem } from '../../types/api';
-import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getLatestProxyDelay } from '../../utils/proxy';
+import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf, resolveActiveProxyLeafNames } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import {
   getStoredProxiesIsCompact,
@@ -121,6 +121,7 @@ export const ProxiesView: React.FC = () => {
 
   const handleSingleTest = async (e: React.MouseEvent, nodeName: string) => {
     e.stopPropagation();
+    if (!nodeName || testingNodes[nodeName]) return;
     setTestingNodes((prev) => ({ ...prev, [nodeName]: true }));
     try {
       const delay = await testProxyDelay(nodeName);
@@ -136,11 +137,13 @@ export const ProxiesView: React.FC = () => {
 
   const handleGroupTestAll = async (group: ProxyItem) => {
     if (!group.all || group.all.length === 0) return;
+    const leafNames = resolveActiveProxyLeafNames(group.all, proxies);
+    if (leafNames.length === 0) return;
     setIsGroupTesting((prev) => ({ ...prev, [group.name]: true }));
     showToast(`正在批量测速 [${group.name}] 中的节点...`, 'info');
 
     try {
-      await testProxyDelayBatch(group.all);
+      await testProxyDelayBatch(leafNames);
       showToast(`[${group.name}] 批量测速已完成`, 'success');
     } catch (err: unknown) {
       if (!isActionCancelledError(err)) {
@@ -254,9 +257,7 @@ export const ProxiesView: React.FC = () => {
 
             // Latency displayed for the collapsed summary must describe the actual
             // currently active node, not a requested fixed node that may be unhealthy.
-            const activeNodeName = group.now;
-            const activeNode = activeNodeName ? proxies[activeNodeName] : undefined;
-            const activeDelay = getLatestProxyDelay(activeNode);
+            const activeDelay = getActiveProxyDelay(group, proxies);
             const selectedLatency = getLatencyInfo(activeDelay);
 
             return (
@@ -358,7 +359,7 @@ export const ProxiesView: React.FC = () => {
                       {sortedNodes.map((nodeName) => {
                         const isSelected = isFixed ? group.fixed === nodeName : group.now === nodeName;
                         const node = proxies[nodeName];
-                        const latestDelay = getLatestProxyDelay(node);
+                        const latestDelay = getActiveProxyDelay(node, proxies);
                         const latency = getLatencyInfo(latestDelay);
 
                         const tooltipText = isFixed && group.fixed === nodeName
@@ -408,9 +409,10 @@ export const ProxiesView: React.FC = () => {
                     {sortedNodes.map((nodeName) => {
                       const isSelected = isFixed ? group.fixed === nodeName : group.now === nodeName;
                       const node = proxies[nodeName];
-                      const latestDelay = getLatestProxyDelay(node);
+                      const latestDelay = getActiveProxyDelay(node, proxies);
                       const latency = getLatencyInfo(latestDelay);
-                      const isTesting = !!testingNodes[nodeName];
+                      const testTarget = getActiveProxyLeaf(node, proxies)?.name;
+                      const isTesting = !!(testTarget && testingNodes[testTarget]);
 
                       const cardTooltip = isSelectableGroup
                         ? group.type === 'URLTest'
@@ -453,9 +455,10 @@ export const ProxiesView: React.FC = () => {
                           <button
                             type="button"
                             className="btn-circle-action size-xs node-mini-zap"
-                            onClick={(e) => handleSingleTest(e, nodeName)}
-                            data-tooltip={isTesting ? '正在测速...' : `测速 ${nodeName}`}
-                            aria-label={isTesting ? '正在测速' : `测速 ${nodeName}`}
+                            onClick={(e) => { if (testTarget) void handleSingleTest(e, testTarget); }}
+                            disabled={!testTarget || isTesting}
+                            data-tooltip={isTesting ? '正在测速...' : testTarget ? `测速 ${testTarget}` : '当前路由无法测速'}
+                            aria-label={isTesting ? '正在测速' : testTarget ? `测速 ${testTarget}` : '当前路由无法测速'}
                           >
                             <Zap size={10} className={isTesting ? 'spin-animation' : ''} />
                           </button>

@@ -7,6 +7,7 @@ import {
   shouldCommitProxySnapshot,
   appendProxyHistory,
   startProxyPolling,
+  createCoalescedProxyPollRunner,
   MAX_PROXY_HISTORY_LENGTH
 } from '../context/ControllerContext';
 import { MihomoVersion, ProxyItem } from '../types/api';
@@ -249,6 +250,110 @@ describe('Proxy Polling & State Ordering Safeguards', () => {
       expect(pollCount).toBe(1);
 
       handle.stop();
+    });
+  });
+
+  describe('6. Coalesced catch-up reads for an in-flight GET /proxies', () => {
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((done) => { resolve = done; });
+      return { promise, resolve };
+    };
+
+    const flushPromises = async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+
+    it('runs exactly one fresh GET after overlapping requests, using the latest validity callback', async () => {
+      const source = { generation: 1, client: {} as any };
+      const responses = [deferred<boolean>(), deferred<boolean>()];
+      const execute = vi.fn()
+        .mockImplementationOnce(() => responses[0].promise)
+        .mockImplementationOnce(() => responses[1].promise);
+      const run = createCoalescedProxyPollRunner(
+        () => ({ ...source }),
+        (a, b) => a.generation === b.generation && a.client === b.client,
+        execute
+      );
+      let oldCallbackValid = true;
+      const oldCallback = () => oldCallbackValid;
+      const latestCallback = () => true;
+
+      const firstPoll = run(oldCallback);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(await run(oldCallback)).toBe(false);
+      expect(await run(latestCallback)).toBe(false);
+      oldCallbackValid = false;
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      responses[0].resolve(true);
+      await firstPoll;
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(2);
+
+      responses[1].resolve(true);
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('cancels the queued catch-up if the view becomes ineligible or its source changes', async () => {
+      const source = { generation: 1, client: {} as any };
+      const response = deferred<boolean>();
+      const execute = vi.fn().mockImplementation(() => response.promise);
+      const run = createCoalescedProxyPollRunner(
+        () => ({ ...source }),
+        (a, b) => a.generation === b.generation && a.client === b.client,
+        execute
+      );
+      let eligible = true;
+
+      const firstPoll = run(() => eligible);
+      await run(() => eligible);
+      eligible = false;
+      response.resolve(true);
+      await firstPoll;
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      // A source change also invalidates any queued callback captured for the old client.
+      eligible = true;
+      const nextResponse = deferred<boolean>();
+      execute.mockImplementationOnce(() => nextResponse.promise);
+      const nextPoll = run(() => eligible);
+      await run(() => eligible);
+      source.generation += 1;
+      source.client = {};
+      nextResponse.resolve(true);
+      await nextPoll;
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('allows an eligible request from a replacement source to catch up after the old GET settles', async () => {
+      const source = { generation: 1, client: {} as any };
+      const responses = [deferred<boolean>(), deferred<boolean>()];
+      const execute = vi.fn()
+        .mockImplementationOnce(() => responses[0].promise)
+        .mockImplementationOnce(() => responses[1].promise);
+      const run = createCoalescedProxyPollRunner(
+        () => ({ ...source }),
+        (a, b) => a.generation === b.generation && a.client === b.client,
+        execute
+      );
+
+      const firstPoll = run(() => true);
+      source.generation += 1;
+      source.client = {};
+      await run(() => true);
+      responses[0].resolve(false);
+      await firstPoll;
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(2);
+
+      responses[1].resolve(true);
+      await flushPromises();
+      expect(execute).toHaveBeenCalledTimes(2);
     });
   });
 });
