@@ -77,7 +77,7 @@ export function getLatencyInfo(delay?: number): LatencyInfo {
   if (delay <= 0) {
     return { level: 'timeout', text: '超时', className: 'latency-timeout' };
   }
-  if (delay < 150) {
+  if (delay < 180) {
     return { level: 'fast', text: `${delay} ms`, className: 'latency-fast' };
   }
   if (delay < 350) {

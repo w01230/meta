@@ -338,31 +338,31 @@ html, body {
 /* Latency Badges */
 .latency-fast {
   background: var(--status-green-bg);
-  color: var(--status-green);
-  border: 1px solid rgba(36, 130, 79, 0.2);
+  color: var(--latency-fast-fg);
+  border: 1px solid rgba(21, 128, 61, 0.2);
 }
 
 .latency-medium {
   background: var(--status-amber-bg);
-  color: var(--status-amber);
-  border: 1px solid rgba(180, 83, 9, 0.2);
+  color: var(--latency-medium-fg);
+  border: 1px solid rgba(161, 98, 7, 0.2);
 }
 
 .latency-slow {
   background: var(--status-red-bg);
-  color: var(--status-red);
-  border: 1px solid rgba(197, 48, 48, 0.2);
+  color: var(--latency-slow-fg);
+  border: 1px solid rgba(194, 65, 12, 0.2);
 }
 
 .latency-timeout {
   background: #F3F4F6;
-  color: var(--status-red);
+  color: var(--latency-timeout-fg);
   border: 1px solid #E5E7EB;
 }
 
 .latency-untested {
   background: rgba(0, 0, 0, 0.04);
-  color: var(--text-muted);
+  color: var(--latency-untested-fg);
   border: 1px solid transparent;
 }
 

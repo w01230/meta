@@ -54,9 +54,10 @@ describe('getLatencyInfo', () => {
   it('categorizes latency accurately', () => {
     expect(getLatencyInfo(undefined).level).toBe('untested');
     expect(getLatencyInfo(0).level).toBe('timeout');
-    expect(getLatencyInfo(80).level).toBe('fast');
-    expect(getLatencyInfo(220).level).toBe('medium');
-    expect(getLatencyInfo(600).level).toBe('slow');
+    expect(getLatencyInfo(179).level).toBe('fast');
+    expect(getLatencyInfo(180).level).toBe('medium');
+    expect(getLatencyInfo(349).level).toBe('medium');
+    expect(getLatencyInfo(350).level).toBe('slow');
   });
 
   it('treats malformed and non-finite latency values as untested', () => {

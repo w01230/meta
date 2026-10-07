@@ -53,6 +53,14 @@
   --status-red: #C53030;
   --status-red-bg: #FEE2E2;
 
+  /* Latency semantics: shared foreground for numeric badges and compact dots.
+     Darkened slightly from the original dot swatches so text remains legible. */
+  --latency-fast-fg: #15803D;
+  --latency-medium-fg: #A16207;
+  --latency-slow-fg: #C2410C;
+  --latency-timeout-fg: #B91C1C;
+  --latency-untested-fg: #64748B;
+
   /* 6. 纯白圆形动作按钮专有令牌 (White Circular Buttons) */
   --btn-circle-bg: #FFFFFF;
   --btn-circle-border: rgba(0, 0, 0, 0.08);

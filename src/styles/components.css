@@ -943,23 +943,23 @@
 }
 
 .compact-flag-ring.ring-fast {
-  --ring-color: #16A34A;
+  --ring-color: var(--latency-fast-fg);
 }
 
 .compact-flag-ring.ring-medium {
-  --ring-color: #EAB308;
+  --ring-color: var(--latency-medium-fg);
 }
 
 .compact-flag-ring.ring-slow {
-  --ring-color: #F97316;
+  --ring-color: var(--latency-slow-fg);
 }
 
 .compact-flag-ring.ring-timeout {
-  --ring-color: #DC2626;
+  --ring-color: var(--latency-timeout-fg);
 }
 
 .compact-flag-ring.ring-untested {
-  --ring-color: #94A3B8;
+  --ring-color: var(--latency-untested-fg);
 }
 
 @media (pointer: coarse), (max-width: 768px) {
