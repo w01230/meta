@@ -180,6 +180,26 @@
   height: 32px;
 }
 
+.nav-mode-capsule .mode-capsule-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 26px;
+  padding: 0;
+}
+
+@media (pointer: coarse) and (min-width: 1025px) {
+  .nav-mode-capsule {
+    height: 50px;
+  }
+
+  .nav-mode-capsule .mode-capsule-item {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 /* NOTE: .mode-capsule-item base styles are in components.css — removed duplicate from here */
 
 .demo-capsule-btn {

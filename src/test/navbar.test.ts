@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveNavbarVersion, resolveSettingsButtonClass } from '../components/common/Navbar';
+import { resolveNavbarVersion, resolveRunModeLabel, resolveSettingsButtonClass } from '../components/common/Navbar';
 
 describe('resolveNavbarVersion', () => {
   describe('demo mode', () => {
@@ -75,5 +75,15 @@ describe('settings button controller status indicator', () => {
     ['connected', true, 'nav-settings-btn status-connected demo-active']
   ] as const)('maps %s (demo: %s) to the matching status class', (status, demoMode, expected) => {
     expect(resolveSettingsButtonClass(status, demoMode)).toBe(expected);
+  });
+});
+
+describe('top bar run mode icons', () => {
+  it.each([
+    ['rule', '规则模式'],
+    ['global', '全局模式'],
+    ['direct', '直连模式']
+  ] as const)('retains the full accessible and tooltip label for %s mode', (mode, expected) => {
+    expect(resolveRunModeLabel(mode)).toBe(expected);
   });
 });

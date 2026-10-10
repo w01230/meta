@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { useToast } from './Toast';
-import { RefreshCw, Settings, Activity } from 'lucide-react';
+import { RefreshCw, Settings, Activity, SlidersHorizontal, Globe2, Zap } from 'lucide-react';
 import { RunMode } from '../../types/api';
 import { ConnectionStatus } from '../../types/connection';
 import { resolveStatusText } from '../../utils/status';
@@ -42,6 +42,16 @@ export function resolveSettingsButtonClass(status: ConnectionStatus, demoMode: b
   return `nav-settings-btn status-${status}${demoMode ? ' demo-active' : ''}`;
 }
 
+export function resolveRunModeLabel(mode: RunMode): string {
+  return ({ rule: '规则模式', global: '全局模式', direct: '直连模式' })[mode];
+}
+
+const RUN_MODE_OPTIONS = [
+  { mode: 'rule', Icon: SlidersHorizontal },
+  { mode: 'global', Icon: Globe2 },
+  { mode: 'direct', Icon: Zap }
+] as const;
+
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
   onSelectTab,
@@ -60,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { showToast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [pendingMode, setPendingMode] = useState<RunMode | null>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -76,14 +87,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const handleModeChange = async (mode: RunMode) => {
+    if (pendingMode !== null) return;
+    setPendingMode(mode);
     try {
       await updateConfigMode(mode);
-      const modeNames = { rule: '规则模式', global: '全局模式', direct: '直连模式' };
-      showToast(`已切换至 ${modeNames[mode]}`, 'success');
+      showToast(`已切换至 ${resolveRunModeLabel(mode)}`, 'success');
     } catch (err: unknown) {
       if (!isActionCancelledError(err)) {
         showToast(`切换模式失败: ${(err as Error)?.message}`, 'error');
       }
+    } finally {
+      setPendingMode(null);
     }
   };
 
@@ -165,20 +179,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right: Utility Actions */}
         <div className="nav-utility-actions">
           {/* Run Mode Segmented Capsule (Desktop only; on mobile accessible in overview & settings) */}
-          <div className="mode-segmented-capsule nav-desktop-only" role="group" aria-label="运行模式切换">
-            {(['rule', 'global', 'direct'] as RunMode[]).map((m) => {
-              const label = m === 'rule' ? '规则' : m === 'global' ? '全局' : '直连';
-              const isActive = config?.mode === m;
+          <div
+            className="mode-segmented-capsule nav-mode-capsule nav-desktop-only"
+            role="group"
+            aria-label="运行模式切换"
+            aria-busy={pendingMode !== null}
+          >
+            {RUN_MODE_OPTIONS.map(({ mode, Icon }) => {
+              const isActive = config?.mode === mode;
+              const modeLabel = resolveRunModeLabel(mode);
               return (
                 <button
-                  key={m}
+                  key={mode}
                   type="button"
                   className={`mode-capsule-item ${isActive ? 'active' : ''}`}
-                  onClick={() => handleModeChange(m)}
-                  disabled={status !== 'connected'}
-                  data-tooltip={`切换至${label}模式`}
+                  onClick={() => void handleModeChange(mode)}
+                  disabled={status !== 'connected' || pendingMode !== null}
+                  aria-pressed={isActive}
+                  aria-label={`切换至${modeLabel}`}
+                  data-tooltip={`切换至${modeLabel}`}
                 >
-                  {label}
+                  <Icon size={14} aria-hidden="true" />
                 </button>
               );
             })}
