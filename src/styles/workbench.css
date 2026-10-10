@@ -211,76 +211,39 @@
   font-weight: 600;
 }
 
-.endpoint-avatar-ring {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-circle);
-  background: linear-gradient(135deg, #DEE2DC 0%, #CCD2CA 100%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  user-select: none;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  transition: transform 0.15s ease;
-}
-
-.endpoint-avatar-ring:hover {
-  transform: scale(1.05);
-}
-
-/* Combined Controller Status & Avatar Action Control (Far-Right) */
-.controller-status-btn {
+/* One settings action with a compact controller status indicator. */
+.nav-settings-btn {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: var(--radius-circle);
-  background: linear-gradient(135deg, #DEE2DC 0%, #CCD2CA 100%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  user-select: none;
 }
 
-.controller-status-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+.nav-settings-status-dot {
+  position: absolute;
+  top: auto;
+  bottom: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 50%;
+  background: var(--status-red);
+  pointer-events: none;
 }
 
-.controller-status-btn .avatar-initial {
-  line-height: 1;
-  font-weight: 700;
-  font-size: 13px;
-  display: inline-block;
-  color: var(--status-red);
-  transition: color 0.15s ease;
+.nav-settings-btn.status-connected .nav-settings-status-dot {
+  background: var(--status-green);
 }
 
-.controller-status-btn.status-connected .avatar-initial {
-  color: var(--status-green);
+.nav-settings-btn.status-connecting .nav-settings-status-dot {
+  background: var(--status-amber);
 }
 
-.controller-status-btn.status-connecting .avatar-initial {
-  color: var(--status-amber);
+.nav-settings-btn.status-disconnected .nav-settings-status-dot,
+.nav-settings-btn.status-error .nav-settings-status-dot {
+  background: var(--status-red);
 }
 
-.controller-status-btn.status-disconnected .avatar-initial,
-.controller-status-btn.status-error .avatar-initial {
-  color: var(--status-red);
-}
-
-.controller-status-btn.demo-active .avatar-initial {
-  color: #C2410C;
+.nav-settings-btn.demo-active .nav-settings-status-dot {
+  background: #C2410C;
 }
 
 /* Status Dot & Text Visibility */
@@ -1307,7 +1270,7 @@
     display: none; /* Managed by MobileNav at the bottom */
   }
 
-  /* Mobile top bar: prioritize brand + compact status/settings; hide mode capsule, demo toggle, and avatar */
+  /* Mobile top bar: keep the mode selector in Settings to preserve room for utility actions. */
   .nav-desktop-only {
     display: none !important;
   }
@@ -1338,8 +1301,7 @@
     min-width: 30px;
   }
 
-  .nav-utility-actions .btn-circle-action.size-md,
-  .controller-status-btn {
+  .nav-utility-actions .btn-circle-action.size-md {
     width: 30px;
     height: 30px;
     min-width: 30px;

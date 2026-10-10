@@ -5,7 +5,7 @@ import { useToast } from './Toast';
 import { resolveStatusText } from '../../utils/status';
 import { checkMixedContentRisk, normalizeBaseUrl } from '../../utils/url';
 import { extractVersionToken } from '../../utils/format';
-import { LogLevel } from '../../types/api';
+import { LogLevel, RunMode } from '../../types/api';
 import { ApiError } from '../../services/apiClient';
 import packageInfo from '../../../package.json';
 import { 
@@ -51,6 +51,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     demoMode,
     setDemoMode,
     status,
+    config,
+    updateConfigMode,
     statusError,
     version,
     isRemembered,
@@ -70,6 +72,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [showSecret, setShowSecret] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTogglingDemo, setIsTogglingDemo] = useState(false);
+  const [isChangingMode, setIsChangingMode] = useState(false);
   const [isChangingLogLevel, setIsChangingLogLevel] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -228,6 +231,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       }
     } finally {
       setIsChangingLogLevel(false);
+    }
+  };
+
+  const handleModeChange = async (mode: RunMode) => {
+    if (mode === config?.mode) return;
+    setIsChangingMode(true);
+    try {
+      await updateConfigMode(mode);
+      const modeNames: Record<RunMode, string> = { rule: '规则模式', global: '全局模式', direct: '直连模式' };
+      showToast(`已切换至 ${modeNames[mode]}`, 'success');
+    } catch (err: unknown) {
+      if (!isActionCancelledError(err)) {
+        showToast(`切换模式失败：${(err as Error)?.message || '请求失败'}`, 'error');
+      }
+    } finally {
+      setIsChangingMode(false);
     }
   };
 
@@ -496,6 +515,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="runtime-settings-list">
+            {/* Compact fallback for tablet and mobile, where the top-bar switch is hidden. */}
+            <div className="runtime-setting-row runtime-setting-row-segmented settings-runtime-mode-row">
+              <div className="setting-desc">
+                <span className="setting-name">运行模式</span>
+              </div>
+              <div className="mode-segmented-capsule capsule-modes" role="group" aria-label="运行模式切换">
+                {(['rule', 'global', 'direct'] as RunMode[]).map((mode) => {
+                  const labels: Record<RunMode, string> = { rule: '规则', global: '全局', direct: '直连' };
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`mode-capsule-item ${config?.mode === mode ? 'active' : ''}`}
+                      onClick={() => void handleModeChange(mode)}
+                      disabled={(!demoMode && status !== 'connected') || isChangingMode || isSubmitting}
+                      aria-pressed={config?.mode === mode}
+                    >
+                      {labels[mode]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Log Level */}
             <div className="runtime-setting-row runtime-setting-row-segmented">
               <div className="setting-desc">

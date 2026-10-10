@@ -2535,6 +2535,12 @@ label.setting-name {
   max-width: 100%;
 }
 
+@media (min-width: 1025px) {
+  .settings-modal-body .settings-runtime-mode-row {
+    display: none;
+  }
+}
+
 .settings-modal-body .mode-segmented-capsule .mode-capsule-item {
   min-height: 36px;
   white-space: nowrap;
@@ -2758,12 +2764,6 @@ a:focus-visible {
     align-items: center;
     gap: 8px;
     width: 100%;
-  }
-
-  .proxies-toolbar .mode-segmented-capsule {
-    grid-column: 1 / -1;
-    justify-self: start;
-    max-width: 100%;
   }
 
   .proxies-toolbar .sort-toggle-btn {

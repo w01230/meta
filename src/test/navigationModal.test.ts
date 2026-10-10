@@ -44,7 +44,7 @@ describe('Navigation and Consolidated Settings Modal Integration', () => {
         isSettingsOpen = false;
       };
 
-      // User on proxies clicks 'config' in desktop nav or mobile More
+      // Legacy config deep link opens settings without changing the underlying tab.
       handleSelectTab('config');
       expect(isSettingsOpen).toBe(true);
       expect(currentTab).toBe('proxies'); // underlying tab preserved
@@ -56,19 +56,7 @@ describe('Navigation and Consolidated Settings Modal Integration', () => {
     });
   });
 
-  describe('Circular Status Indicator State Mapping', () => {
-    const getStatusIndicatorClass = (status: string, demoMode: boolean) => {
-      return `status-circle-indicator status-${status} ${demoMode ? 'demo-active' : ''}`.trim();
-    };
-
-    it('generates correct circular status indicator classes for all connection states', () => {
-      expect(getStatusIndicatorClass('connected', false)).toBe('status-circle-indicator status-connected');
-      expect(getStatusIndicatorClass('connecting', false)).toBe('status-circle-indicator status-connecting');
-      expect(getStatusIndicatorClass('disconnected', false)).toBe('status-circle-indicator status-disconnected');
-      expect(getStatusIndicatorClass('error', false)).toBe('status-circle-indicator status-error');
-      expect(getStatusIndicatorClass('connected', true)).toBe('status-circle-indicator status-connected demo-active');
-    });
-
+  describe('Controller status text', () => {
     it('provides accessible full status text corresponding to the state', () => {
       expect(resolveStatusText('connected', false, true)).toBe('核心已连接');
       expect(resolveStatusText('connected', false, false)).toBe('控制器已连接');
@@ -203,4 +191,3 @@ describe('Navigation and Consolidated Settings Modal Integration', () => {
     });
   });
 });
-

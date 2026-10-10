@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveNavbarVersion } from '../components/common/Navbar';
+import { resolveNavbarVersion, resolveSettingsButtonClass } from '../components/common/Navbar';
 
 describe('resolveNavbarVersion', () => {
   describe('demo mode', () => {
@@ -63,5 +63,17 @@ describe('resolveNavbarVersion', () => {
       expect(getVersionTooltip(true, 'v1.19.3', 'v1.19.3 · 演示')).toBe('演示模式 · 核心版本: v1.19.3');
       expect(getVersionTooltip(false, 'v1.19.3', 'v1.19.3')).toBe('核心版本: v1.19.3');
     });
+  });
+});
+
+describe('settings button controller status indicator', () => {
+  it.each([
+    ['connected', false, 'nav-settings-btn status-connected'],
+    ['connecting', false, 'nav-settings-btn status-connecting'],
+    ['disconnected', false, 'nav-settings-btn status-disconnected'],
+    ['error', false, 'nav-settings-btn status-error'],
+    ['connected', true, 'nav-settings-btn status-connected demo-active']
+  ] as const)('maps %s (demo: %s) to the matching status class', (status, demoMode, expected) => {
+    expect(resolveSettingsButtonClass(status, demoMode)).toBe(expected);
   });
 });

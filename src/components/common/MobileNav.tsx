@@ -6,17 +6,15 @@ import {
   Terminal, 
   MoreHorizontal, 
   ShieldCheck, 
-  Sliders,
   X 
 } from 'lucide-react';
 
 interface MobileNavProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
-  onOpenSettings?: () => void;
 }
 
-export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab, onOpenSettings }) => {
+export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const moreTriggerRef = useRef<HTMLButtonElement>(null);
@@ -29,8 +27,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab, o
   ];
 
   const moreItems = [
-    { id: 'rules', label: '分流规则', icon: ShieldCheck, desc: '查看路由与分流匹配策略' },
-    { id: 'config', label: '控制配置', icon: Sliders, desc: '外部控制器与运行时参数' }
+    { id: 'rules', label: '分流规则', icon: ShieldCheck, desc: '查看路由与分流匹配策略' }
   ];
 
   const isMoreActive = currentTab === 'rules';
@@ -117,15 +114,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab, o
                   className={`mobile-more-item ${isActive ? 'active' : ''}`}
                   onClick={() => {
                     setShowMoreMenu(false);
-                    if (item.id === 'config') {
-                      if (onOpenSettings) {
-                        onOpenSettings();
-                      } else {
-                        onSelectTab('config');
-                      }
-                    } else {
-                      onSelectTab(item.id);
-                    }
+                    onSelectTab(item.id);
                   }}
                   aria-current={isActive ? 'page' : undefined}
                 >

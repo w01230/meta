@@ -3,7 +3,7 @@ import { isActionCancelledError, useController } from '../../context/ControllerC
 import { getLatencyInfo } from '../../utils/format';
 import { Search, Zap, X, Shield, ArrowUpDown, Navigation, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useToast } from '../common/Toast';
-import { RunMode, ProxyItem } from '../../types/api';
+import { ProxyItem } from '../../types/api';
 import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf, resolveActiveProxyLeafNames } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
 import {
@@ -16,9 +16,7 @@ import {
 export const ProxiesView: React.FC = () => {
   const {
     proxies,
-    config,
     hideGlobal,
-    updateConfigMode,
     switchProxy,
     unfixProxy,
     testProxyDelay,
@@ -81,18 +79,6 @@ export const ProxiesView: React.FC = () => {
     hideGlobal,
     search
   });
-
-  const handleModeChange = async (mode: RunMode) => {
-    try {
-      await updateConfigMode(mode);
-      const modeNames: Record<RunMode, string> = { rule: '规则模式', global: '全局模式', direct: '直连模式' };
-      showToast(`已切换至 ${modeNames[mode]}`, 'success');
-    } catch (err: unknown) {
-      if (!isActionCancelledError(err)) {
-        showToast(`切换模式失败: ${(err as Error)?.message || '请求失败'}`, 'error');
-      }
-    }
-  };
 
   const handleSwitch = async (groupName: string, nodeName: string) => {
     try {
@@ -172,24 +158,6 @@ export const ProxiesView: React.FC = () => {
       {/* Header Toolbar */}
       <div className="proxies-toolbar meta-card">
         <div className="toolbar-left">
-          {/* Mode Switcher */}
-          <div className="mode-segmented-capsule" role="group" aria-label="分流模式切换">
-            {(['rule', 'global', 'direct'] as RunMode[]).map((mode) => {
-              const label = mode === 'rule' ? '规则模式' : mode === 'global' ? '全局模式' : '直连模式';
-              const isActive = config?.mode === mode;
-              return (
-                <button
-                  key={mode}
-                  className={`mode-capsule-item ${isActive ? 'active' : ''}`}
-                  onClick={() => handleModeChange(mode)}
-                  disabled={!isConnected}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Sort Pill Dropdown / Toggle */}
           <button
             className="pill-btn sort-toggle-btn"

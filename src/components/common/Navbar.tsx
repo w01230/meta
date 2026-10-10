@@ -35,9 +35,12 @@ const NAV_TABS = [
   { id: 'proxies', label: '代理' },
   { id: 'connections', label: '连接' },
   { id: 'rules', label: '规则' },
-  { id: 'logs', label: '日志' },
-  { id: 'config', label: '配置' }
+  { id: 'logs', label: '日志' }
 ];
+
+export function resolveSettingsButtonClass(status: ConnectionStatus, demoMode: boolean): string {
+  return `nav-settings-btn status-${status}${demoMode ? ' demo-active' : ''}`;
+}
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
@@ -84,18 +87,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  // Derive endpoint initial for circular avatar
-  const endpointHost = (() => {
-    try {
-      const parsed = new URL(baseUrl);
-      return parsed.hostname;
-    } catch {
-      return 'M';
-    }
-  })();
-  const avatarLetter = endpointHost === '127.0.0.1' || endpointHost === 'localhost' ? 'L' : endpointHost.charAt(0).toUpperCase();
-
   const fullStatusText = resolveStatusText(status, demoMode, !!version?.version);
+  const controllerStatusLabel = `当前控制器: ${baseUrl} (${fullStatusText})`;
 
   const versionToken = resolveNavbarVersion(status, demoMode, version?.version);
 
@@ -160,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 key={tab.id}
                 type="button"
                 className={`nav-tab-item ${isActive ? 'active-pill' : ''}`}
-                onClick={() => tab.id === 'config' ? onOpenSettings() : onSelectTab(tab.id)}
+                onClick={() => onSelectTab(tab.id)}
                 aria-current={isActive ? 'page' : undefined}
               >
                 {tab.label}
@@ -169,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
 
-        {/* Right: Utility Actions & Avatar */}
+        {/* Right: Utility Actions */}
         <div className="nav-utility-actions">
           {/* Run Mode Segmented Capsule (Desktop only; on mobile accessible in overview & settings) */}
           <div className="mode-segmented-capsule nav-desktop-only" role="group" aria-label="运行模式切换">
@@ -206,23 +199,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Settings Button: Pure White Circular */}
           <button
             type="button"
-            className="btn-circle-action size-md"
+            className={`btn-circle-action size-md ${resolveSettingsButtonClass(status, demoMode)}`}
             onClick={onOpenSettings}
-            aria-label="外部控制器与参数设置"
-            data-tooltip="控制器设置"
+            aria-label={`打开控制器与参数设置。${controllerStatusLabel}`}
+            data-tooltip={controllerStatusLabel}
           >
             <Settings size={15} />
-          </button>
-
-          {/* Combined Controller Status & Endpoint Avatar Action (Far-Right) */}
-          <button
-            type="button"
-            className={`btn-circle-action size-md controller-status-btn status-${status} ${demoMode ? 'demo-active' : ''}`}
-            onClick={onOpenSettings}
-            aria-label={`当前控制器: ${baseUrl} (${fullStatusText})`}
-            data-tooltip={`${baseUrl} (${fullStatusText})`}
-          >
-            <span className="avatar-initial">{avatarLetter}</span>
+            <span className="nav-settings-status-dot" aria-hidden="true" />
           </button>
         </div>
       </div>

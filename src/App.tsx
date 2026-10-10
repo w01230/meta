@@ -164,8 +164,7 @@ export const AppContent: React.FC = () => {
       {/* 3. Bottom Navigation for Mobile Devices (<768px) */}
       <MobileNav 
         currentTab={currentTab} 
-        onSelectTab={handleSelectTab} 
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onSelectTab={handleSelectTab}
       />
 
       {/* 4. Global Consolidated Controller Settings Modal */}
