@@ -3,8 +3,25 @@ import { PRIMARY_TABS, shouldAutoOpenSettings } from '../App';
 import { resolveStatusText } from '../utils/status';
 import { MihomoApiClient, ApiError } from '../services/apiClient';
 import { resolveRuntimeVersionToken } from '../components/common/SettingsModal';
+import { resolveModalTabFocusTarget } from '../components/common/Modal';
 
 describe('Navigation and Consolidated Settings Modal Integration', () => {
+  describe('Modal initial focus and tab containment', () => {
+    it('wraps Tab from initial dialog focus to the first control', () => {
+      expect(resolveModalTabFocusTarget(false, false, false, true, true)).toBe('first');
+    });
+
+    it('wraps Shift+Tab from initial dialog focus to the last control', () => {
+      expect(resolveModalTabFocusTarget(true, false, false, true, true)).toBe('last');
+    });
+
+    it('continues wrapping at the first and last controls while allowing interior movement', () => {
+      expect(resolveModalTabFocusTarget(true, true, false, false, true)).toBe('last');
+      expect(resolveModalTabFocusTarget(false, false, true, false, true)).toBe('first');
+      expect(resolveModalTabFocusTarget(false, false, false, false, true)).toBeNull();
+    });
+  });
+
   describe('Tab and Route resolution', () => {
     it('defines primary content tabs excluding standalone config route', () => {
       expect(PRIMARY_TABS).toEqual(['overview', 'proxies', 'connections', 'rules', 'logs']);

@@ -12,6 +12,18 @@ interface ModalProps {
   className?: string;
 }
 
+export function resolveModalTabFocusTarget(
+  shiftKey: boolean,
+  activeIsFirst: boolean,
+  activeIsLast: boolean,
+  activeIsDialog: boolean,
+  focusIsInsideDialog: boolean
+): 'first' | 'last' | null {
+  if (shiftKey && (activeIsFirst || activeIsDialog || !focusIsInsideDialog)) return 'last';
+  if (!shiftKey && (activeIsLast || activeIsDialog || !focusIsInsideDialog)) return 'first';
+  return null;
+}
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -64,18 +76,10 @@ export const Modal: React.FC<ModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Focus first interactive element or modal container
+    // Focus the dialog itself first. Settings contains several sections, and
+    // focusing its tooltip-bearing close button made that tooltip appear on open.
     const focusTimer = setTimeout(() => {
-      if (modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length > 0) {
-          focusable[0].focus();
-        } else {
-          modalRef.current.focus();
-        }
-      }
+      modalRef.current?.focus();
     }, 50);
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -100,17 +104,17 @@ export const Modal: React.FC<ModalProps> = ({
 
         const firstElement = focusables[0];
         const lastElement = focusables[focusables.length - 1];
-
-        if (e.shiftKey) {
-          if (document.activeElement === firstElement || !modalRef.current.contains(document.activeElement)) {
-            e.preventDefault();
-            lastElement.focus();
-          }
-        } else {
-          if (document.activeElement === lastElement || !modalRef.current.contains(document.activeElement)) {
-            e.preventDefault();
-            firstElement.focus();
-          }
+        const activeElement = document.activeElement;
+        const focusTarget = resolveModalTabFocusTarget(
+          e.shiftKey,
+          activeElement === firstElement,
+          activeElement === lastElement,
+          activeElement === modalRef.current,
+          modalRef.current.contains(activeElement)
+        );
+        if (focusTarget) {
+          e.preventDefault();
+          (focusTarget === 'first' ? firstElement : lastElement).focus();
         }
       }
     };
