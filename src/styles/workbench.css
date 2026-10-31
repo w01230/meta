@@ -184,19 +184,39 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 44px;
   height: 26px;
   padding: 0;
 }
 
 @media (pointer: coarse) and (min-width: 1025px) {
-  .nav-mode-capsule {
-    height: 50px;
+  .nav-mode-capsule .mode-capsule-item {
+    height: 44px;
+    position: relative;
   }
 
-  .nav-mode-capsule .mode-capsule-item {
-    width: 44px;
-    height: 44px;
+  .nav-mode-capsule .mode-capsule-item.active,
+  .nav-mode-capsule .mode-capsule-item.active:hover:not(:disabled) {
+    z-index: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .nav-mode-capsule .mode-capsule-item.active::before,
+  .nav-mode-capsule .mode-capsule-item.active:hover:not(:disabled)::before {
+    content: '';
+    position: absolute;
+    /* Same 44×26px pill and 3px capsule inset as fine-pointer mode. */
+    inset: 9px 0;
+    z-index: -1;
+    border-radius: var(--radius-pill);
+    background: var(--border-outer);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
+  }
+
+  .nav-mode-capsule .mode-capsule-item.active:hover:not(:disabled)::before {
+    background: #2D302C;
   }
 }
 
@@ -294,29 +314,6 @@
   gap: 20px;
 }
 .overview-container > * { min-width: 0; max-width: 100%; }
-
-.demo-notice-banner {
-  background: #FFF7ED;
-  border: 1px solid rgba(249, 115, 22, 0.25);
-  border-radius: var(--radius-card);
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #9A3412;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-
-.demo-notice-badge {
-  background: #FDBA74;
-  color: #7C2D12;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
 
 .connecting-notice-banner {
   background: var(--status-amber-bg);

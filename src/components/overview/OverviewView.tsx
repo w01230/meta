@@ -222,16 +222,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   return (
     <div className="overview-container">
-      {/* Demo Mode Notice Banner */}
-      {demoMode && (
-        <div className="demo-notice-banner" role="status">
-          <span className="demo-notice-badge">✨ 仿真预览中</span>
-          <span className="demo-notice-text">
-            【仿真预览】当前正在使用内置模拟数据展示界面排版与交互体验。所有策略切换、测速探测、连接断开均为仿真动作。
-          </span>
-        </div>
-      )}
-
       {/* Connecting Notice Banner */}
       {!demoMode && status === 'connecting' && (
         <div className="connecting-notice-banner" role="status">
