@@ -12,7 +12,8 @@ interface TrafficRateChartProps {
   demoMode: boolean;
 }
 
-const TRAFFIC_WINDOW_MINUTES = 5;
+export const MIN_TRAFFIC_WINDOW_SECONDS = 30;
+export const MAX_TRAFFIC_WINDOW_SECONDS = 300;
 const CHART_MARGIN = Object.freeze({ top: 14, right: 20, bottom: 26, left: 88 });
 
 export interface TrafficWindow {
@@ -23,14 +24,42 @@ export interface TrafficWindow {
 
 const MAX_SAMPLE_GAP_MS = 10_000;
 
+/** Grow the chart window as real history accumulates without shrinking when old samples expire. */
+export function getExpandedTrafficWindowSeconds(
+  samples: TrafficTick[],
+  now: number,
+  currentWindowSeconds = MIN_TRAFFIC_WINDOW_SECONDS,
+): number {
+  const safeCurrentWindow = [30, 60, 120, MAX_TRAFFIC_WINDOW_SECONDS].includes(currentWindowSeconds)
+    ? currentWindowSeconds
+    : MIN_TRAFFIC_WINDOW_SECONDS;
+  const sampleTimes = samples
+    .map((sample) => sample.time)
+    .filter((time): time is number => typeof time === 'number' && Number.isFinite(time) && time <= now);
+  if (!Number.isFinite(now) || sampleTimes.length === 0) return safeCurrentWindow;
+
+  const elapsedSeconds = Math.max(0, (now - Math.min(...sampleTimes)) / 1000);
+  const neededWindowSeconds = elapsedSeconds >= 120
+    ? MAX_TRAFFIC_WINDOW_SECONDS
+    : elapsedSeconds >= 60
+      ? 120
+      : elapsedSeconds >= 30
+        ? 60
+        : MIN_TRAFFIC_WINDOW_SECONDS;
+  return Math.max(safeCurrentWindow, neededWindowSeconds);
+}
+
 /** Filter measurements against the selected clock window; never stretch sparse history to fill it. */
 export function selectTrafficWindow(
   samples: TrafficTick[],
-  minutes: number,
+  windowSeconds: number,
   now: number,
 ): TrafficWindow {
   const endTime = now;
-  const startTime = endTime - minutes * 60_000;
+  const safeWindowSeconds = Number.isFinite(windowSeconds) && windowSeconds > 0
+    ? windowSeconds
+    : MIN_TRAFFIC_WINDOW_SECONDS;
+  const startTime = endTime - safeWindowSeconds * 1000;
   return {
     startTime,
     endTime,
@@ -90,6 +119,7 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [trafficWindowSeconds, setTrafficWindowSeconds] = useState(MIN_TRAFFIC_WINDOW_SECONDS);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [measuredChartWidth, setMeasuredChartWidth] = useState<number | null>(null);
@@ -107,14 +137,24 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
     return () => window.clearInterval(intervalId);
   }, [isActive]);
 
-  // Filter actual measured samples within the fixed five-minute window without fabricating missing points
+  useLayoutEffect(() => {
+    if (!isActive || samples.length === 0) {
+      setTrafficWindowSeconds(MIN_TRAFFIC_WINDOW_SECONDS);
+      return;
+    }
+    setTrafficWindowSeconds((currentWindow) =>
+      getExpandedTrafficWindowSeconds(samples, clockNow, currentWindow),
+    );
+  }, [samples, isActive, clockNow]);
+
+  // Filter actual measurements to the expanded clock window; never fabricate missing points.
   const trafficWindow = useMemo(() => {
     return selectTrafficWindow(
       isActive ? samples : [],
-      TRAFFIC_WINDOW_MINUTES,
+      trafficWindowSeconds,
       clockNow,
     );
-  }, [samples, isActive, clockNow]);
+  }, [samples, isActive, clockNow, trafficWindowSeconds]);
   const visibleSamples = trafficWindow.samples;
   const hasSamples = visibleSamples.length > 0;
 
@@ -252,7 +292,7 @@ export const TrafficRateChart: React.FC<TrafficRateChartProps> = ({
     }));
   }, [rateAxis, plotHeight]);
 
-  // Fixed-interval clock ticks preserve the exact current-time boundary.
+  // Keep eight evenly spaced clock ticks at every dynamic window size.
   const xTicks = useMemo(() => {
     const tickTimes = getTrafficTimeTicks(trafficWindow.startTime, trafficWindow.endTime);
     return tickTimes.map((time, i) => {

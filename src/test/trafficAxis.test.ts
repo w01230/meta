@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { getAdaptiveRateAxis, getTrafficTimeTicks } from '../utils/trafficAxis';
 
 describe('getTrafficTimeTicks', () => {
-  it('generates 45-second intervals and appends the exact five-minute endpoint', () => {
+  it.each([30, 60, 120, 300])('keeps eight evenly spaced ticks across a %i-second window', (spanSeconds) => {
     const start = 1_000_000;
-    const end = start + 300_000;
+    const end = start + spanSeconds * 1000;
     const ticks = getTrafficTimeTicks(start, end);
     expect(ticks).toHaveLength(8);
-    expect(ticks).toEqual([
-      start, start + 45_000, start + 90_000, start + 135_000,
-      start + 180_000, start + 225_000, start + 270_000, end,
-    ]);
+    expect(ticks[0]).toBe(start);
+    expect(ticks[ticks.length - 1]).toBe(end);
+    const intervals = ticks.slice(1).map((tick, index) => tick - ticks[index]);
+    intervals.forEach((interval) => expect(interval).toBeCloseTo((end - start) / 7));
   });
 
-  it('includes aligned endpoints once and safely handles degenerate ranges', () => {
-    expect(getTrafficTimeTicks(0, 90_000)).toEqual([0, 45_000, 90_000]);
+  it('returns one tick for a zero span and safely handles invalid ranges or counts', () => {
     expect(getTrafficTimeTicks(100, 100)).toEqual([100]);
     expect(getTrafficTimeTicks(200, 100)).toEqual([]);
     expect(getTrafficTimeTicks(Number.NaN, 100)).toEqual([]);
+    expect(getTrafficTimeTicks(0, 70_000, 0)).toHaveLength(8);
   });
 });
 

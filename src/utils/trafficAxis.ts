@@ -1,4 +1,4 @@
-const TIME_TICK_STEP_SECONDS = 45;
+export const TRAFFIC_TIME_TICK_COUNT = 8;
 const BYTES_PER_KIBIBYTE = 1024;
 const RATE_LADDER = [1, 2, 5, 10, 20, 50, 100, 200, 500] as const;
 const KNOWN_RATE_UNITS = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s', 'EB/s', 'ZB/s', 'YB/s'];
@@ -21,28 +21,24 @@ export interface AdaptiveRateAxis {
   ticks: RateAxisTick[];
 }
 
-/** Generate fixed-interval time ticks, always including the exact window end. */
+/** Generate a fixed number of evenly spaced time ticks, including both endpoints. */
 export function getTrafficTimeTicks(
   startTime: number,
   endTime: number,
-  stepSeconds = TIME_TICK_STEP_SECONDS,
+  count = TRAFFIC_TIME_TICK_COUNT,
 ): number[] {
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return [];
-  const safeStepSeconds = Number.isFinite(stepSeconds) && stepSeconds > 0
-    ? stepSeconds
-    : TIME_TICK_STEP_SECONDS;
-  const stepMs = safeStepSeconds * 1000;
-  if (!Number.isFinite(stepMs) || stepMs <= 0) return [startTime, endTime];
+  if (endTime === startTime) return [startTime];
 
-  const ticks: number[] = [];
-  for (let index = 0; ; index++) {
-    const tick = startTime + index * stepMs;
-    if (!Number.isFinite(tick) || tick > endTime) break;
-    if (ticks.length > 0 && tick <= ticks[ticks.length - 1]) break;
-    ticks.push(tick);
-  }
-  if (ticks.length === 0 || ticks[ticks.length - 1] !== endTime) ticks.push(endTime);
-  return ticks;
+  const span = endTime - startTime;
+  if (!Number.isFinite(span)) return [];
+  const safeCount = Number.isInteger(count) && count >= 2 ? count : TRAFFIC_TIME_TICK_COUNT;
+
+  return Array.from({ length: safeCount }, (_, index) =>
+    index === safeCount - 1
+      ? endTime
+      : startTime + (span / (safeCount - 1)) * index,
+  );
 }
 
 function formatAxisValue(value: number): string {
