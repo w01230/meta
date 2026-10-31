@@ -184,7 +184,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: 32px;
+  flex: 0 0 32px;
   height: 26px;
   padding: 0;
 }
@@ -206,7 +207,7 @@
   .nav-mode-capsule .mode-capsule-item.active:hover:not(:disabled)::before {
     content: '';
     position: absolute;
-    /* Same 44×26px pill and 3px capsule inset as fine-pointer mode. */
+    /* Match the 32×26px fine-pointer pill; the capsule's 3px padding frames it. */
     inset: 9px 0;
     z-index: -1;
     border-radius: var(--radius-pill);
