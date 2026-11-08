@@ -1,4 +1,8 @@
 :root {
+  /* Center the desktop canvas with roughly 1100px of usable content. */
+  --layout-max-width: 1180px;
+  --layout-gutter: clamp(2rem, 3.2vw, 40px);
+
   /* 1. 画布与背景 (Canvas & Backgrounds) */
   --bg-page-gradient: linear-gradient(135deg, #F0F6F2 0%, #F5F6FA 45%, #F0EEF8 100%);
   --bg-panel-glass: rgba(255, 255, 255, 0.74);

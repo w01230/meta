@@ -80,9 +80,9 @@ html, body {
 
 .main-viewport-content {
   width: 100%;
-  max-width: 1560px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
-  padding: 20px clamp(2rem, 3.2vw, 5rem) 48px;
+  padding: 20px var(--layout-gutter) 48px;
   display: flex;
   flex-direction: column;
   flex: 1;

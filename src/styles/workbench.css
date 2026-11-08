@@ -21,8 +21,8 @@
 
 .top-bar-inner {
   width: 100%;
-  max-width: 1560px;
-  padding: 0 clamp(2rem, 3.2vw, 5rem);
+  max-width: var(--layout-max-width);
+  padding: 0 var(--layout-gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
