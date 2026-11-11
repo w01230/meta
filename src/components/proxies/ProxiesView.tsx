@@ -6,6 +6,7 @@ import { useToast } from '../common/Toast';
 import { ProxyItem } from '../../types/api';
 import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf, resolveActiveProxyLeafNames } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
+import { ProxyGroupIcon } from '../common/ProxyGroupIcon';
 import {
   getStoredProxiesIsCompact,
   setStoredProxiesIsCompact,
@@ -237,7 +238,7 @@ export const ProxiesView: React.FC = () => {
                 <div className="proxy-card-header">
                   <div className="card-header-row-primary">
                     <div className="card-title-meta">
-                      <CircularFlag name={group.name} size={16} className="group-flag-icon" />
+                      <ProxyGroupIcon name={group.name} />
                       <h3 className="proxy-card-title" data-tooltip={group.name} aria-label={group.name}>
                         {sanitizeDisplayName(group.name)}
                       </h3>

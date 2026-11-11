@@ -3,6 +3,7 @@ import { isActionCancelledError, useController } from '../../context/ControllerC
 import { formatBytes, getLatencyInfo } from '../../utils/format';
 import { sortProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf } from '../../utils/proxy';
 import { CircularFlag } from '../common/CircularFlag';
+import { ProxyGroupIcon } from '../common/ProxyGroupIcon';
 import { TrafficRateChart } from './TrafficRateChart';
 import { RuleFlowPanel } from './RuleFlowPanel';
 
@@ -424,7 +425,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     {/* Strategy group identity and per-group details navigation */}
                     <div className="deal-card-left">
                       <div className="deal-group-title" data-tooltip={group.name}>
-                        <CircularFlag name={group.name} size={18} className="group-flag-inline" />
+                        <ProxyGroupIcon name={group.name} className="group-flag-inline" fallbackSize={18} />
                         <span className="deal-group-name">{sanitizeDisplayName(group.name)}</span>
                       </div>
 

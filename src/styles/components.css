@@ -1928,6 +1928,15 @@ label.setting-name {
 }
 
 /* Circular Flag Badge / Icon */
+.proxy-group-rect-flag {
+  display: inline-block;
+  width: 20px;
+  height: 15px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 .group-flag-icon {
   display: inline-flex;
   align-items: center;
