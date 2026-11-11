@@ -26,7 +26,7 @@ export const CircularFlag: React.FC<CircularFlagProps> = ({
 
   if (code) {
     const baseUrl = (((import.meta as any).env?.BASE_URL as string) || '/').replace(/\/+$/, '');
-    const flagSrc = `${baseUrl}/flags/${code}.svg`;
+    const flagSrc = `${baseUrl}/flags/circle/${code}.svg`;
 
     return (
       <img
