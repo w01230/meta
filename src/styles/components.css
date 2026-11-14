@@ -486,7 +486,7 @@
 }
 
 .proxy-card-item {
-  padding: 12px 14px;
+  padding: 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -524,8 +524,8 @@
   width: 100%;
 }
 
-/* Align the indicator's left edge with the first 14px flag inside its 26px button. */
-.proxy-card-item.is-collapsed .selection-target-wrap {
+/* Keep the selection inset consistent in both layouts, using the compact flag's left edge. */
+.proxy-card-item .selection-target-wrap {
   padding-inline-start: 6px;
   box-sizing: border-box;
 }
@@ -975,7 +975,7 @@
     border-radius: 6px;
   }
 
-  .proxy-card-item.is-collapsed .selection-target-wrap {
+  .proxy-card-item .selection-target-wrap {
     padding-inline-start: 15px;
   }
 
@@ -1004,7 +1004,7 @@
     margin-inline: -8px;
   }
 
-  .proxy-card-item.is-collapsed .selection-target-wrap {
+  .proxy-card-item .selection-target-wrap {
     padding-inline-start: 7px;
   }
 }
