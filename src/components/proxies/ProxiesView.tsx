@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { isActionCancelledError, useController } from '../../context/ControllerContext';
 import { getLatencyInfo } from '../../utils/format';
-import { Search, Zap, X, Shield, ArrowUpDown, Navigation, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Search, Zap, X, Shield, ArrowUpDown, ChevronsUpDown, ChevronsDownUp, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { ProxyItem } from '../../types/api';
 import { sortProxyGroups, sortProxyNodesByDelay, filterProxyGroups, sanitizeDisplayName, getActiveProxyDelay, getActiveProxyLeaf, resolveActiveProxyLeafNames } from '../../utils/proxy';
@@ -298,7 +298,10 @@ export const ProxiesView: React.FC = () => {
                     {/* Current Active Selection Hint (truthfully conveying fixed vs fallback) */}
                     <div className="current-selection-bar">
                       <div className="selection-target-wrap" aria-label={`当前选定：${group.now || '未指定'}`}>
-                        <Navigation size={11} className="selection-pointer-icon" aria-hidden="true" />
+                        <svg width={11} height={11} viewBox="0 0 24 24" className="selection-pointer-icon" aria-hidden="true" focusable="false">
+                          <circle cx={12} cy={12} r={9} fill="none" stroke="currentColor" strokeWidth={1.5} />
+                          <circle cx={12} cy={12} r={2.75} fill="currentColor" />
+                        </svg>
                         <span className="sr-only">当前选定：</span>
                         {isFixed ? (
                           <span className="selection-node-name" data-tooltip={`已固定: ${group.fixed}${group.now && group.now !== group.fixed ? ` (当前回退: ${group.now})` : ''}`}>

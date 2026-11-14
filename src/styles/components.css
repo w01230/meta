@@ -524,6 +524,12 @@
   width: 100%;
 }
 
+/* Align the indicator's left edge with the first 14px flag inside its 26px button. */
+.proxy-card-item.is-collapsed .selection-target-wrap {
+  padding-inline-start: 6px;
+  box-sizing: border-box;
+}
+
 .card-header-row-primary {
   display: flex;
   align-items: center;
@@ -625,7 +631,7 @@
 .selection-target-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   max-width: 100%;
   flex-shrink: 0;
@@ -876,13 +882,6 @@
   box-shadow: 0 0 0 2.5px rgba(0, 0, 0, 0.13);
 }
 
-.compact-node-btn.active-selected .compact-node-flag {
-  width: 16px !important;
-  height: 16px !important;
-  min-width: 16px !important;
-  min-height: 16px !important;
-}
-
 .compact-flag-ring {
   width: 18px;
   height: 18px;
@@ -976,6 +975,10 @@
     border-radius: 6px;
   }
 
+  .proxy-card-item.is-collapsed .selection-target-wrap {
+    padding-inline-start: 15px;
+  }
+
   .compact-flag-ring {
     width: 18px;
     height: 18px;
@@ -999,6 +1002,10 @@
 @media (pointer: coarse) and (min-width: 701px) {
   .compact-node-btn {
     margin-inline: -8px;
+  }
+
+  .proxy-card-item.is-collapsed .selection-target-wrap {
+    padding-inline-start: 7px;
   }
 }
 
@@ -2831,10 +2838,10 @@ a:focus-visible {
     flex: 1;
   }
 
-  .card-title-meta .proxy-card-title {
+  .proxy-card-header .card-title-meta .proxy-card-title {
     font-size: 13px;
     font-weight: 600;
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2880,7 +2887,7 @@ a:focus-visible {
   .selection-target-wrap {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     min-width: 0;
     max-width: 100%;
     flex: 1;
