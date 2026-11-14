@@ -594,7 +594,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="node-switch-item-right">
                       {delay !== undefined && delay > 0 && (
-                        <span className="node-switch-delay tabular-nums">⚡ {delay}ms</span>
+                        <span className="node-switch-delay tabular-nums">{delay}ms</span>
                       )}
                       {isSelected && <Check size={16} className="node-switch-check" />}
                     </div>
