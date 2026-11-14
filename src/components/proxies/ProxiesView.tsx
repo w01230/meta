@@ -348,7 +348,7 @@ export const ProxiesView: React.FC = () => {
                           <button
                             key={nodeName}
                             type="button"
-                            className={`compact-node-btn ${isSelected ? 'active-selected' : ''} latency-${latency.level} ${!isSelectableGroup ? 'readonly-node' : ''}`}
+                            className={`compact-node-btn ${isSelected ? 'active-selected' : ''} ${!isSelectableGroup ? 'readonly-node' : ''}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (isSelectableGroup) handleSwitch(group.name, nodeName);

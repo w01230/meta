@@ -843,17 +843,14 @@
   margin: 0;
   cursor: pointer;
   position: relative;
-  transition: transform 0.15s ease;
+  transition: background-color 0.15s ease;
   flex-shrink: 0;
   outline: none;
 }
 
-.compact-node-btn:hover:not(:disabled) {
-  transform: scale(1.08);
-}
-
+.compact-node-btn:hover:not(:disabled),
 .compact-node-btn:active:not(:disabled) {
-  transform: scale(0.96);
+  background: var(--accent-blue-subtle);
 }
 
 .compact-node-btn:focus-visible {
@@ -868,20 +865,6 @@
   opacity: 0.88;
 }
 
-/* Selected state: transparent button + single subtle pale neutral outer keyline/halo outside normal latency ring (no blue, no disk) */
-.compact-node-btn.active-selected,
-.compact-node-btn.active-selected:hover:not(:disabled) {
-  background: transparent;
-}
-
-.compact-node-btn.active-selected .compact-flag-ring {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-  box-shadow: 0 0 0 2.5px rgba(0, 0, 0, 0.13);
-}
-
 .compact-flag-ring {
   width: 18px;
   height: 18px;
@@ -889,29 +872,38 @@
   min-height: 18px;
   border-radius: 50%;
   position: relative;
-  border: 0;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #FFFFFF;
   box-sizing: border-box;
   overflow: visible;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.96);
-  --ring-color: #64748B;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
+/* A short arc follows the flag; selection changes its length, not its color. */
 .compact-flag-ring::after {
   content: "";
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  z-index: 1;
-  width: 5px;
-  height: 5px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ring-color);
+  inset: -2px;
+  pointer-events: none;
+  --arc-start: 155deg;
+  --arc-sweep: 50deg;
+  background: conic-gradient(from var(--arc-start), var(--compact-latency-color) 0deg var(--arc-sweep), transparent var(--arc-sweep));
+  -webkit-mask: radial-gradient(circle, transparent 7.1px, #000 7.3px, #000 9.3px, transparent 9.5px);
+  mask: radial-gradient(circle, transparent 7.1px, #000 7.3px, #000 9.3px, transparent 9.5px);
 }
+
+.compact-node-btn.active-selected .compact-flag-ring::after {
+  --arc-start: 135deg;
+  --arc-sweep: 90deg;
+}
+.compact-flag-ring.ring-fast { --compact-latency-color: var(--latency-fast-fg); }
+.compact-flag-ring.ring-medium { --compact-latency-color: var(--latency-medium-fg); }
+.compact-flag-ring.ring-slow { --compact-latency-color: var(--latency-slow-fg); }
+.compact-flag-ring.ring-timeout { --compact-latency-color: var(--latency-timeout-fg); }
+.compact-flag-ring.ring-untested { --compact-latency-color: var(--latency-untested-fg); }
 
 /* In the collapsed view, keep the flags at the leading edge and show only
    the real current-node latency at the trailing edge. */
@@ -939,26 +931,6 @@
   height: 14px !important;
   min-width: 14px !important;
   min-height: 14px !important;
-}
-
-.compact-flag-ring.ring-fast {
-  --ring-color: var(--latency-fast-fg);
-}
-
-.compact-flag-ring.ring-medium {
-  --ring-color: var(--latency-medium-fg);
-}
-
-.compact-flag-ring.ring-slow {
-  --ring-color: var(--latency-slow-fg);
-}
-
-.compact-flag-ring.ring-timeout {
-  --ring-color: var(--latency-timeout-fg);
-}
-
-.compact-flag-ring.ring-untested {
-  --ring-color: var(--latency-untested-fg);
 }
 
 @media (pointer: coarse), (max-width: 768px) {
