@@ -905,6 +905,13 @@
 .compact-flag-ring.ring-timeout { --compact-latency-color: var(--latency-timeout-fg); }
 .compact-flag-ring.ring-untested { --compact-latency-color: var(--latency-untested-fg); }
 
+@media (forced-colors: active) {
+  .compact-node-btn.active-selected .compact-flag-ring {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 /* In the collapsed view, keep the flags at the leading edge and show only
    the real current-node latency at the trailing edge. */
 .proxy-collapsed-row {

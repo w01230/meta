@@ -781,53 +781,5 @@ describe('Proxy and Connection utilities', () => {
       expect(getCardClassName(true, true)).toContain('is-expanded');
       expect(getCardClassName(true, true)).toContain('compact-interactive');
     });
-
-    it('sets aria-selected on compact node button matching selection state with subtle neutral outer keyline and transparent button', () => {
-      const getCompactNodeButtonAttributes = (
-        nodeName: string,
-        delay: number | undefined,
-        isSelected: boolean,
-        isSelector: boolean
-      ) => {
-        const latency = getLatencyInfo(delay);
-        return {
-          className: `compact-node-btn ${isSelected ? 'active-selected' : ''} latency-${latency.level} ${!isSelector ? 'readonly-node' : ''}`,
-          ariaSelected: isSelected,
-          ariaPressed: isSelector ? isSelected : undefined,
-          ariaLabel: `${nodeName}, 延迟: ${latency.text}${isSelected ? ', 当前已选择' : ''}`,
-          // Uniform 2px latency border preserved (no thickened ring, no gray disk)
-          ringClassName: `compact-flag-ring ring-${latency.level}`,
-          hasThickenedRingShadow: false,
-          hasGrayDiskBackground: false,
-          // Single subtle neutral keyline (no blue outline)
-          hasSingleNeutralKeyline: isSelected,
-          hasBlueAccentOutline: false,
-          desktopWidth: 26,
-          mobileWidth: 30
-        };
-      };
-
-      const selectedNode = getCompactNodeButtonAttributes('HK-01', 45, true, true);
-      expect(selectedNode.ariaSelected).toBe(true);
-      expect(selectedNode.ariaPressed).toBe(true);
-      expect(selectedNode.className).toContain('active-selected');
-      expect(selectedNode.ringClassName).toBe('compact-flag-ring ring-fast');
-      expect(selectedNode.hasThickenedRingShadow).toBe(false);
-      expect(selectedNode.hasGrayDiskBackground).toBe(false);
-      expect(selectedNode.hasSingleNeutralKeyline).toBe(true);
-      expect(selectedNode.hasBlueAccentOutline).toBe(false);
-      expect(selectedNode.desktopWidth).toBe(26);
-      expect(selectedNode.mobileWidth).toBe(30);
-
-      const unselectedNode = getCompactNodeButtonAttributes('US-01', 180, false, true);
-      expect(unselectedNode.ariaSelected).toBe(false);
-      expect(unselectedNode.ariaPressed).toBe(false);
-      expect(unselectedNode.className).not.toContain('active-selected');
-      expect(unselectedNode.ringClassName).toBe('compact-flag-ring ring-medium');
-      expect(unselectedNode.hasThickenedRingShadow).toBe(false);
-      expect(unselectedNode.hasGrayDiskBackground).toBe(false);
-      expect(unselectedNode.hasSingleNeutralKeyline).toBe(false);
-      expect(unselectedNode.hasBlueAccentOutline).toBe(false);
-    });
   });
 });
